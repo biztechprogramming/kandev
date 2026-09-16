@@ -327,6 +327,7 @@ export function useTaskSubmitHandlers({
   clearDraft,
   freshBranchEnabled,
   isLocalExecutor,
+  remoteOriginMode,
   repositoryLocalPath,
   noRepository,
   sourcePolicyInvalid,
@@ -512,6 +513,7 @@ export function useTaskSubmitHandlers({
         discoveredRepositories,
         workspaceRepositories,
         isLocalExecutor,
+        remoteOriginMode,
         freshBranch: buildFreshBranchPayload(consentedDirtyFiles),
       });
     },
@@ -526,6 +528,7 @@ export function useTaskSubmitHandlers({
       discoveredRepositories,
       workspaceRepositories,
       isLocalExecutor,
+      remoteOriginMode,
       isFreshBranchActive,
     ],
   );
@@ -542,6 +545,7 @@ export function useTaskSubmitHandlers({
         discoveredRepositories,
         workspaceRepositories,
         isLocalExecutor,
+        remoteOriginMode,
         freshBranch: buildFreshBranchPayload(consentedDirtyFiles),
       });
     },
@@ -555,6 +559,7 @@ export function useTaskSubmitHandlers({
       discoveredRepositories,
       workspaceRepositories,
       isLocalExecutor,
+      remoteOriginMode,
       isFreshBranchActive,
     ],
   );

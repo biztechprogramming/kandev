@@ -36,6 +36,7 @@ import type { TaskCreateLaunchPreview } from "@/components/task-create-dialog-la
 import type { TaskRemoteProviderReadinessMap } from "@/components/task-create-dialog-remote-provider-readiness";
 import type { TaskCreateLastUsedSourceApi } from "@/lib/types/http-user-settings";
 import type { ExecutorSourcePolicy } from "@/components/task-create-dialog-executor-source-policy";
+import type { RepositoryCloneSourceState } from "@/hooks/domains/repositories/use-repository-clone-source";
 
 export type TaskCreateSubmit = (
   payload: Parameters<typeof createTask>[0],
@@ -351,6 +352,10 @@ export type DialogComputedValues = {
   agentCompatState: AgentCompatState;
   /** Label of the effective agent profile (null when none is selected or it is unknown). */
   selectedAgentProfileName: string | null;
+  /** Current host-origin inspections keyed by the stable local-row key. */
+  remoteOriginStates: Record<string, RepositoryCloneSourceState>;
+  /** Rechecks selected host origins after provider or network recovery. */
+  refreshRemoteOrigins: () => void;
   /** Subset of agent profiles that pass the executor's auth-credential check. See `StoreSelections.compatibleAgentProfiles`. */
   compatibleAgentProfiles: AgentProfileOption[];
   /** True once the remote-auth catalog has been fetched. See `StoreSelections.authLoaded`. */
@@ -682,6 +687,8 @@ export type SubmitHandlersDeps = {
   clearDraft: () => void;
   freshBranchEnabled: boolean;
   isLocalExecutor: boolean;
+  /** True when the selected executor materializes local repositories from origin. */
+  remoteOriginMode?: boolean;
   /** Resolved on-disk path for the selected repository (workspace or discovered). Empty if not local. */
   repositoryLocalPath: string;
   /** When true, the task is created with no repositories (repo-less mode). */
@@ -759,6 +766,7 @@ export type DialogFormBodyProps = {
   onFolderSelectionAdded?: (wasEmpty: boolean) => void;
   onRepositorySelectionAdded?: (wasFolderOnly: boolean) => void;
   onAllWorkspaceSourcesRemoved?: () => void;
+  onRepositorySelectionRemoved?: (remaining: TaskRepositorySelection[]) => void;
   /** Repository sets available in this workspace, and how to apply or define one. */
   repositorySets?: TaskRepositorySetsConfig;
   localRepositoryCreation?: {
@@ -789,6 +797,10 @@ export type DialogFormBodyProps = {
   agentCompatState: AgentCompatState;
   /** Label of the effective agent profile, for the incompatible-agent note. */
   selectedAgentProfileName: string | null;
+  /** Current host-origin inspections keyed by the stable local-row key. */
+  remoteOriginStates: Record<string, RepositoryCloneSourceState>;
+  /** Rechecks the selected host origins after a provider or network recovery. */
+  refreshRemoteOrigins: () => void;
   /** Name of the effective workflow, for the workflow-locked incompatible note. */
   effectiveWorkflowName: string | null;
   executorProfileName: string | null;
