@@ -1,0 +1,20 @@
+[
+  {
+    "file": "chat-motion-desktop.png",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "capturedAt": "2026-09-17T11:18:34.814Z",
+    "sourceCommit": "c60ee76b16000158f6e66d9804790382094dc9cf"
+  },
+  {
+    "file": "chat-motion-mobile.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "capturedAt": "2026-09-17T11:18:38.564Z",
+    "sourceCommit": "c60ee76b16000158f6e66d9804790382094dc9cf"
+  }
+]
