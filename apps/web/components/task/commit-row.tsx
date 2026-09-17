@@ -8,7 +8,7 @@ import {
   IconArrowUp,
   IconExternalLink,
 } from "@tabler/icons-react";
-import { useRef, useState } from "react";
+import { useState } from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import {
@@ -47,6 +47,8 @@ export type CommitItem = {
   /** Explicit provenance used when provider and checkout histories diverge. */
   presentation?: CommitPresentation;
 };
+
+let nextCommitFileNavigationToken = 0;
 
 /** Context menu for commit items */
 function CommitContextMenu({
@@ -314,12 +316,10 @@ function useCommitFileNavigationHandler(
     fileNavigation?: CommitFileNavigationRequest,
   ) => void,
 ) {
-  const navigationTokenRef = useRef(0);
   return (path: string) => {
-    navigationTokenRef.current += 1;
     onOpenCommitDetail?.(commit.detailTarget, {
       path,
-      token: navigationTokenRef.current,
+      token: (nextCommitFileNavigationToken += 1),
     });
   };
 }

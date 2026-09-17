@@ -35,6 +35,12 @@ const baseProps = {
 };
 
 describe("CollapsibleFileHeader", () => {
+  it("forwards custom classes to the desktop identity container", () => {
+    render(<CollapsibleFileHeader {...baseProps} className="desktop-custom" />);
+
+    expect(screen.getByTestId("collapsible-file-identity").className).toContain("desktop-custom");
+  });
+
   it("keeps the identity toggle and action slots separate on desktop", () => {
     render(<CollapsibleFileHeader {...baseProps} />);
 

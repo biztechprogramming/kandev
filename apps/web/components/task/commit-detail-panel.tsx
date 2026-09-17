@@ -111,9 +111,10 @@ function headerCommit(
   };
 }
 
-function commitTargetKey(target: CommitDetailTarget): string {
-  if (target.source === "local") return `local:${target.repo ?? ""}:${target.sha}`;
-  return `github:${target.workspaceId}:${target.owner}/${target.repo}:${target.sha}`;
+function commitTargetKey(target: CommitDetailTarget, sessionId?: string | null): string {
+  const sessionKey = sessionId ?? "";
+  if (target.source === "local") return `local:${sessionKey}:${target.repo ?? ""}:${target.sha}`;
+  return `github:${sessionKey}:${target.workspaceId}:${target.owner}/${target.repo}:${target.sha}`;
 }
 
 /** Standalone commit diff viewer — no dockview dependencies. */
@@ -141,7 +142,7 @@ export const CommitDiffView = memo(function CommitDiffView({
 
   return (
     <CommitDetailContent
-      key={commitTargetKey(target)}
+      key={commitTargetKey(target, activeSessionId)}
       target={target}
       fileEntries={files ? Object.entries(files) : []}
       commit={commit}
@@ -204,7 +205,7 @@ const CommitDetailPanel = memo(function CommitDetailPanel({
     <PanelRoot>
       <PanelBody padding={false} scroll>
         <CommitDetailContent
-          key={commitTargetKey(target)}
+          key={commitTargetKey(target, activeSessionId)}
           target={target}
           fileEntries={files ? Object.entries(files) : []}
           commit={commit}

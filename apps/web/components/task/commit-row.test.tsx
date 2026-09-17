@@ -5,6 +5,7 @@ import { CommitRow, type CommitItem } from "./commit-row";
 const mocks = vi.hoisted(() => ({
   isMobile: false,
   isFinePointer: true,
+  files: null as Record<string, { path: string; status: "modified" }> | null,
 }));
 
 const COMMIT_TOGGLE_TEST_ID = "commit-toggle";
@@ -41,7 +42,7 @@ vi.mock("@kandev/ui/tooltip", () => ({
 
 vi.mock("@/hooks/domains/session/use-commit-detail", () => ({
   useCommitDetail: () => ({
-    files: null,
+    files: mocks.files,
     commit: null,
     loading: false,
     error: null,
@@ -58,6 +59,7 @@ afterEach(() => {
   cleanup();
   mocks.isMobile = false;
   mocks.isFinePointer = true;
+  mocks.files = null;
 });
 
 function remoteCommit(): CommitItem {
@@ -77,6 +79,32 @@ function remoteCommit(): CommitItem {
     },
   };
 }
+
+describe("CommitRow file navigation", () => {
+  it("allocates a new file-navigation token after the row remounts", () => {
+    mocks.files = { "src/app.ts": { path: "src/app.ts", status: "modified" } };
+    const onOpenCommitDetail = vi.fn();
+    const commit: CommitItem = {
+      ...remoteCommit(),
+      commit_sha: "local123456",
+      detailTarget: { source: "local", sha: "local123456" },
+    };
+    const { rerender } = render(
+      <CommitRow commit={commit} isLatest onOpenCommitDetail={onOpenCommitDetail} />,
+    );
+
+    fireEvent.click(screen.getByTestId(COMMIT_TOGGLE_TEST_ID));
+    fireEvent.click(screen.getByTestId("commit-file-src-app.ts"));
+    rerender(<div />);
+    rerender(<CommitRow commit={commit} isLatest onOpenCommitDetail={onOpenCommitDetail} />);
+    fireEvent.click(screen.getByTestId(COMMIT_TOGGLE_TEST_ID));
+    fireEvent.click(screen.getByTestId("commit-file-src-app.ts"));
+
+    const requests = onOpenCommitDetail.mock.calls.map(([, request]) => request);
+    expect(requests).toHaveLength(2);
+    expect(requests[0].token).not.toBe(requests[1].token);
+  });
+});
 
 describe("CommitRow", () => {
   it("hides unknown statistics and local mutation actions for remote commits", () => {

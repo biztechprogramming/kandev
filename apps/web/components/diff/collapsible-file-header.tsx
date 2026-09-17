@@ -217,7 +217,10 @@ export function CollapsibleFileHeader({
 
   return (
     <>
-      <div data-testid={identityTestId} className="flex min-w-0 flex-1 items-center gap-2">
+      <div
+        data-testid={identityTestId}
+        className={cn("flex min-w-0 flex-1 items-center gap-2", className)}
+      >
         {desktopLeading}
         <CollapseButton
           filePath={filePath}

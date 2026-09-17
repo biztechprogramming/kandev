@@ -95,6 +95,12 @@ describe("CommitRowFiles loading", () => {
     });
     rerender(<CommitRowFiles target={target} />);
     expect(screen.getByRole("alert").textContent).toContain("Unable to load files");
+    const retryButton = screen.getByRole("button", { name: "Retry" });
+    expect(retryButton.className).not.toContain("min-h-11");
+
+    mocks.isFinePointer = false;
+    rerender(<CommitRowFiles target={target} />);
+    expect(screen.getByRole("button", { name: "Retry" }).className).toContain("min-h-11");
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(refetch).toHaveBeenCalledOnce();
   });

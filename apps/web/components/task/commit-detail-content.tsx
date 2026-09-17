@@ -328,41 +328,39 @@ function CommitFileIndex({
           <IconChevronRight className="size-3.5 text-muted-foreground" />
         )}
       </button>
-      {expanded && (
-        <ol id={listId} className="border-t border-border/50 px-1 py-1">
-          {entries.map(([path, file]) => {
-            const { directory, name } = splitCollapsibleFilePath(path);
-            return (
-              <li key={path}>
-                <button
-                  type="button"
-                  data-testid="commit-file-index-entry"
-                  data-file-path={path}
-                  aria-label={path}
-                  className="flex min-h-7 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-xs hover:bg-muted/60 max-md:min-h-11 [@media(pointer:coarse)]:min-h-11"
-                  onClick={() => onActivate(path)}
-                >
-                  <span className="min-w-0 flex-1" title={path}>
-                    {isMobile ? (
-                      <span className="flex min-w-0 flex-col justify-center leading-4">
-                        <span className="truncate font-medium text-foreground">{name}</span>
-                        {directory && (
-                          <span className="truncate text-[11px] text-muted-foreground">
-                            {directory}
-                          </span>
-                        )}
-                      </span>
-                    ) : (
-                      <span className="block truncate">{path}</span>
-                    )}
-                  </span>
-                  <CommitFileStats file={file} testId={`commit-file-index-stats-${path}`} />
-                </button>
-              </li>
-            );
-          })}
-        </ol>
-      )}
+      <ol id={listId} hidden={!expanded} className="border-t border-border/50 px-1 py-1">
+        {entries.map(([path, file]) => {
+          const { directory, name } = splitCollapsibleFilePath(path);
+          return (
+            <li key={path}>
+              <button
+                type="button"
+                data-testid="commit-file-index-entry"
+                data-file-path={path}
+                aria-label={path}
+                className="flex min-h-7 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-xs hover:bg-muted/60 max-md:min-h-11 [@media(pointer:coarse)]:min-h-11"
+                onClick={() => onActivate(path)}
+              >
+                <span className="min-w-0 flex-1" title={path}>
+                  {isMobile ? (
+                    <span className="flex min-w-0 flex-col justify-center leading-4">
+                      <span className="truncate font-medium text-foreground">{name}</span>
+                      {directory && (
+                        <span className="truncate text-[11px] text-muted-foreground">
+                          {directory}
+                        </span>
+                      )}
+                    </span>
+                  ) : (
+                    <span className="block truncate">{path}</span>
+                  )}
+                </span>
+                <CommitFileStats file={file} testId={`commit-file-index-stats-${path}`} />
+              </button>
+            </li>
+          );
+        })}
+      </ol>
     </aside>
   );
 }
@@ -425,7 +423,7 @@ function CommitFileSections({
             data-file-path={path}
             className="mb-2"
           >
-            <div className="sticky top-0 z-10 border-b border-border/50 bg-card/95 backdrop-blur-sm">
+            <div className="sticky top-0 z-10 border-b border-border/50 bg-card/95 backdrop-blur-sm md:flex md:items-center md:gap-2 md:px-4 md:py-2">
               <CollapsibleFileHeader
                 filePath={path}
                 repositoryName={showRepository ? repositoryName : undefined}

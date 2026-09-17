@@ -18,6 +18,7 @@ import type { FileInfo } from "@/lib/state/store";
 import type { CommitDetailTarget } from "./changes-diff-target";
 import type { ChangedFile } from "./changes-panel-helpers";
 import { buildChangesTree, type ChangesTreeNode } from "./changes-file-tree-model";
+import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 
 type CommitRowFilesProps = {
@@ -170,6 +171,8 @@ function CommitRowTreeDirectory({
 export function CommitRowFiles({ target, onOpenFile }: CommitRowFilesProps) {
   const { t } = useTranslation();
   const layout = useAppStore((state) => state.userSettings.changesPanelLayout);
+  const { isMobile, isFinePointer } = useResponsiveBreakpoint();
+  const touchSized = isMobile || isFinePointer === false;
   const { files, loading, error, refetch } = useCommitDetail(target);
   const entries = useMemo(
     () => (files ? Object.entries(files).sort(([left], [right]) => left.localeCompare(right)) : []),
@@ -198,7 +201,7 @@ export function CommitRowFiles({ target, onOpenFile }: CommitRowFilesProps) {
           type="button"
           variant="outline"
           size="sm"
-          className="min-h-11 cursor-pointer"
+          className={cn("cursor-pointer", touchSized && "min-h-11")}
           onClick={() => void refetch()}
         >
           {t("system:featureTogglesRetry")}

@@ -175,6 +175,9 @@ describe("CommitDetailContent file index", () => {
 
     const indexToggle = screen.getByTestId("commit-file-index-toggle");
     expect(indexToggle.getAttribute("aria-expanded")).toBe(String(true));
+    const indexListId = indexToggle.getAttribute("aria-controls");
+    expect(indexListId).toBeTruthy();
+    expect(document.getElementById(indexListId!)).toBeTruthy();
 
     fireEvent.click(screen.getByTestId(mocks.indexEntryTestId));
     const fileToggle = screen.getByRole("button", { name: `Collapse ${mocks.filePath}` });
@@ -182,8 +185,28 @@ describe("CommitDetailContent file index", () => {
 
     fireEvent.click(indexToggle);
     expect(indexToggle.getAttribute("aria-expanded")).toBe(String(false));
-    expect(screen.queryByTestId(mocks.indexEntryTestId)).toBeNull();
+    expect(document.getElementById(indexListId!)).toBeTruthy();
+    const indexList = document.getElementById(indexListId!);
+    expect(indexList?.hidden).toBe(true);
+    expect(indexList?.querySelector(`[data-testid="${mocks.indexEntryTestId}"]`)).toBeTruthy();
     expect(screen.getByRole("button", { name: `Collapse ${mocks.filePath}` })).toBeTruthy();
+  });
+});
+
+describe("CommitDetailContent desktop layout", () => {
+  it("keeps the desktop file identity and toolbar in one header row", () => {
+    render(
+      <CommitDetailContent
+        target={{ source: "local", sha: "abc123456" }}
+        fileEntries={[[mocks.filePath, file(mocks.filePath)]]}
+      />,
+    );
+
+    const identity = screen.getByTestId("collapsible-file-identity");
+    const header = identity.parentElement;
+    expect(header?.className).toContain("md:flex");
+    expect(header?.className).toContain("md:items-center");
+    expect(header?.querySelector('[data-testid="commit-file-toolbar"]')).toBeTruthy();
   });
 });
 
@@ -287,6 +310,26 @@ describe("CommitDetailContent renderer behavior", () => {
     expect(
       screen.getByTestId(mocks.viewerTestId).getAttribute(mocks.expandUnchangedAttribute),
     ).toBe(String(true));
+  });
+});
+
+describe("CommitDetailContent missing navigation", () => {
+  it("ignores a navigation request for a path not in the file list", () => {
+    const scrollIntoView = vi
+      .spyOn(HTMLElement.prototype, "scrollIntoView")
+      .mockImplementation(() => undefined);
+    const focus = vi.spyOn(HTMLButtonElement.prototype, "focus");
+
+    render(
+      <CommitDetailContent
+        target={{ source: "local", sha: "abc123456" }}
+        fileEntries={[[mocks.filePath, file(mocks.filePath)]]}
+        fileNavigation={{ path: "does-not-exist.ts", token: 1 }}
+      />,
+    );
+
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    expect(focus).not.toHaveBeenCalled();
   });
 });
 
