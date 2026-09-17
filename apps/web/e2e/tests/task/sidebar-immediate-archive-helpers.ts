@@ -66,11 +66,14 @@ export async function checkImmediateArchive(options: {
     await expect(progressToast().locator("svg")).toHaveClass(/animate-spin/);
     await expect(page.getByTestId("toast-container")).toHaveAttribute("aria-live", "polite");
     await expect(progressToast()).toBeInViewport();
-    await progressToast().evaluate(async (element) => {
-      await Promise.all(
-        element.getAnimations().map((animation) => animation.finished.catch(() => undefined)),
-      );
-    });
+    await expect
+      .poll(async () => {
+        const currentViewport = page.viewportSize();
+        const currentBox = await progressToast().boundingBox();
+        if (!currentViewport || !currentBox) return null;
+        return Math.round(currentViewport.width - currentBox.x - currentBox.width);
+      })
+      .toBe(16);
     const viewport = page.viewportSize();
     const toastBox = await progressToast().boundingBox();
     expect(viewport).not.toBeNull();

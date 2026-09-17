@@ -225,6 +225,36 @@ describe("useTaskActions", () => {
     expect(dismissToastMock).toHaveBeenCalledWith(archiveProgressToastId);
   });
 
+  // @covers AC-TASKS-REMOVAL-NAVIGATION-004.2, AC-TASKS-REMOVAL-NAVIGATION-004.3
+  it("keeps the shared toast until a concurrent request resolves after another rejects", async () => {
+    let rejectFirst!: (error: Error) => void;
+    let resolveSecond!: () => void;
+    archiveTaskMock
+      .mockReturnValueOnce(
+        new Promise<void>((_resolve, reject) => {
+          rejectFirst = reject;
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise<void>((resolve) => {
+          resolveSecond = resolve;
+        }),
+      );
+    const { result } = renderHook(() => useTaskActions());
+
+    const firstRequest = result.current.archiveTaskById("task-1");
+    const secondRequest = result.current.archiveTaskById("task-2");
+
+    rejectFirst(new Error(archiveFailureMessage));
+    await expect(firstRequest).rejects.toThrow(archiveFailureMessage);
+    expect(dismissToastMock).not.toHaveBeenCalled();
+
+    resolveSecond();
+    await secondRequest;
+    expect(dismissToastMock).toHaveBeenCalledTimes(1);
+    expect(dismissToastMock).toHaveBeenCalledWith(archiveProgressToastId);
+  });
+
   it("shows localized retry guidance for a dirty-worktree delete conflict", async () => {
     const { ApiError } = await import("@/lib/api/client");
     deleteTaskMock.mockRejectedValueOnce(

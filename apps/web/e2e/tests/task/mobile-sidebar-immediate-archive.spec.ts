@@ -7,6 +7,7 @@ test("phone picker shows archive progress and restores failed archive", async ({
   seedData,
   prCapture,
 }) => {
+  await testPage.setViewportSize({ width: 320, height: 568 });
   await checkImmediateArchive({
     page: testPage,
     api: apiClient,
