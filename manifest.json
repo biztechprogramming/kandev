@@ -5,8 +5,14 @@
       "width": 1440,
       "height": 1000
     },
-    "capturedAt": "2026-09-17T11:18:34.814Z",
-    "sourceCommit": "c60ee76b16000158f6e66d9804790382094dc9cf"
+    "capturedAt": "2026-09-17T13:13:08.453Z",
+    "spacing": {
+      "top": 17,
+      "bottom": 17,
+      "toggleHeight": 28,
+      "toggleWidth": 36
+    },
+    "sourceCommit": "9722227a54071b6e490bce7d09ca32def0fed009"
   },
   {
     "file": "chat-motion-mobile.png",
@@ -14,7 +20,13 @@
       "width": 390,
       "height": 844
     },
-    "capturedAt": "2026-09-17T11:18:38.564Z",
-    "sourceCommit": "c60ee76b16000158f6e66d9804790382094dc9cf"
+    "capturedAt": "2026-09-17T13:13:14.927Z",
+    "spacing": {
+      "top": 17,
+      "bottom": 17,
+      "toggleHeight": 44,
+      "toggleWidth": 44
+    },
+    "sourceCommit": "9722227a54071b6e490bce7d09ca32def0fed009"
   }
 ]
