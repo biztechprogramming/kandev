@@ -8,10 +8,10 @@ const mocks = vi.hoisted(() => ({
   unmounts: vi.fn(),
   activeSessionId: null as string | null,
   useCommitDetail: vi.fn(() => ({
-    files: null,
+    files: null as Record<string, never> | null,
     commit: null,
     loading: false,
-    error: "Commit detail unavailable",
+    error: "Commit detail unavailable" as string | null,
     refetch: mocks.refetch,
   })),
 }));

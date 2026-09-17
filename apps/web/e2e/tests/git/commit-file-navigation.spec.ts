@@ -74,7 +74,7 @@ test.describe("Commit file navigation", () => {
     await expect(indexToggle).toHaveAttribute("aria-expanded", "true");
     await indexToggle.click();
     await expect(indexToggle).toHaveAttribute("aria-expanded", "false");
-    await expect(detail.getByTestId("commit-file-index-entry")).toHaveCount(0);
+    await expect(detail.getByTestId("commit-file-index").locator("ol")).toBeHidden();
     await indexToggle.click();
     await expect(detail.getByTestId("commit-file-index-entry")).toHaveCount(2);
 
