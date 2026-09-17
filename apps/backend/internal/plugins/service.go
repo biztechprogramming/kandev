@@ -51,7 +51,8 @@ type userStateCleanupStore interface {
 //     (e.g. proxies checking a plugin's manifest/capabilities without
 //     going through Service's error-wrapping Get).
 type Service struct {
-	mu sync.Mutex
+	automationRevoker func(string) error
+	mu                sync.Mutex
 	// ownershipMu makes cross-plugin provider/reference ownership checks and
 	// transitions into active one atomic reservation. Per-plugin lifecycle
 	// locks cannot protect two different IDs claiming the same identity.
@@ -95,6 +96,7 @@ type Service struct {
 
 	pluginsDir          string
 	store               store.Store
+	approvals           *approvalLedger
 	registry            *Registry
 	state               *state.Store
 	userState           *state.UserStore
@@ -105,6 +107,7 @@ type Service struct {
 	eventHub            *webapp.EventHub
 	eventSubscription   bus.Subscription
 	userStateCleanup    userStateCleanupStore
+	agentConvs          AgentConversationService
 	eventBus            bus.EventBus
 	conversationTokens  *conversationTokenManager
 	sessionEvents       *SessionEventLog
@@ -582,6 +585,23 @@ func (s *Service) SetWriteDeps(messenger taskMessenger, starter taskStarter) {
 	s.taskStarter = starter
 }
 
+// SetAgentConversations wires the managed agent conversation service
+// (AgentConversationService). Wired by backendapp, guarded by s.mu against
+// concurrent reads.
+func (s *Service) SetAgentConversations(svc AgentConversationService) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.agentConvs = svc
+}
+
+// agentConversationDeps returns the wired agent conversation service, read
+// live (not snapshotted at hostForPlugin time). Guarded by s.mu.
+func (s *Service) agentConversationDeps() AgentConversationService {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.agentConvs
+}
+
 // writeDependencies returns the currently-wired task messenger and task
 // starter. Read live (not snapshotted at hostForPlugin time) so a plugin
 // spawned before SetWriteDeps still resolves them once it is called. Guarded by
@@ -698,6 +718,7 @@ func (s *Service) SetPluginsDir(dir string) error {
 	// Keep package installation rooted correctly even when durable conversation
 	// state initialization fails and the caller continues in degraded mode.
 	s.pluginsDir = dir
+	s.approvals = newApprovalLedger(dir)
 	hostDir := filepath.Join(dir, ".host")
 	conversationTokens, err := loadOrCreateConversationTokenManager(
 		filepath.Join(hostDir, "conversation-token.key"),
@@ -858,6 +879,7 @@ func (s *Service) hostForPlugin(pluginID string) pluginsdk.Host {
 		utilityDeps:         s.utilityAgentDeps,
 		writeDeps:           s.writeDependencies,
 		interactionDeps:     s.interactionResponderDep,
+		agentConversations:  s.agentConversationDeps,
 	}
 }
 

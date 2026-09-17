@@ -40,7 +40,8 @@ type fakeOrchestrator struct {
 	onTurnStart             func(context.Context, string, string) error
 	turnStartResult         orchestrator.ProcessOnTurnStartResult
 	interruptCalls          []interruptCall
-	readinessCalls          []readinessCall
+	readinessCalls          []messagequeue.QueueSessionIdentity
+	readinessQueueSizes     []int
 	launchCalls             []*orchestrator.LaunchSessionRequest
 	launchErr               error
 	launchFunc              func(context.Context, *orchestrator.LaunchSessionRequest) (*orchestrator.LaunchSessionResponse, error)
@@ -102,11 +103,6 @@ type startCreatedCall struct {
 }
 type turnStartCall struct {
 	taskID, sessionID string
-}
-
-type readinessCall struct {
-	identity  messagequeue.QueueSessionIdentity
-	queueSize int
 }
 
 type renameCall struct {
@@ -224,7 +220,8 @@ func (f *fakeOrchestrator) CheckQueueAdmissionReadiness(ctx context.Context, ide
 	queueSize := f.queue.GetStatus(ctx, identity.SessionID).Count
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.readinessCalls = append(f.readinessCalls, readinessCall{identity: identity, queueSize: queueSize})
+	f.readinessCalls = append(f.readinessCalls, identity)
+	f.readinessQueueSizes = append(f.readinessQueueSizes, queueSize)
 }
 
 // QueueAndInterruptForPeerMessage inserts prompt into the fake's real
@@ -948,8 +945,8 @@ func TestHandleMessageTask_QueuedMessage_RechecksAdmissionAfterEnqueue(t *testin
 		TaskID:               child.ID,
 		SessionID:            sess.ID,
 		SessionIncarnationID: sess.QueueIncarnationID,
-	}, orch.readinessCalls[0].identity)
-	assert.Equal(t, 1, orch.readinessCalls[0].queueSize)
+	}, orch.readinessCalls[0])
+	assert.Equal(t, 1, orch.readinessQueueSizes[0])
 }
 
 // TestHandleMessageTask_NonParentSender_InterruptRequest_HardRejected pins

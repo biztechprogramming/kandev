@@ -83,6 +83,14 @@ type ClarificationInputPauser interface {
 	PauseForClarificationInput(ctx context.Context, sessionID string) (int, error)
 }
 
+// SessionCeilingReleaser releases the orchestrator's session-ceiling
+// reservation for a session that this package just moved out of the counted
+// population (STARTING/RUNNING) directly against the repository, bypassing
+// the orchestrator's own persistence funnels.
+type SessionCeilingReleaser interface {
+	ReleaseCeilingReservation(sessionID string)
+}
+
 type clarificationInputPauserWithOptions interface {
 	PauseForClarificationInputWithOptions(
 		ctx context.Context,
@@ -181,6 +189,9 @@ type SessionLauncher interface {
 	ProcessOnTurnStart(ctx context.Context, taskID, sessionID string) (orchestrator.ProcessOnTurnStartResult, error)
 	QueueUserPrompt(ctx context.Context, taskID, sessionID, prompt, model string, planMode bool, attachments []v1.MessageAttachment, metadata map[string]interface{}, userMessageRecorded bool) error
 	GetMessageQueue() *messagequeue.Service
+	// CheckQueueAdmissionReadiness rechecks automatic dispatch for the exact
+	// session incarnation admitted by a queue operation.
+	CheckQueueAdmissionReadiness(context.Context, messagequeue.QueueSessionIdentity)
 	// QueueAndInterruptForPeerMessage atomically queues prompt for sessionID
 	// then interrupts the session's in-flight turn to dispatch it right
 	// away, bypassing FIFO order. Used only by queueThenInterruptTaskMessage
@@ -195,14 +206,6 @@ type SessionLauncher interface {
 	// RenameSession sets the user-visible session tab label and broadcasts
 	// the change. Used by spawn_session_kandev's optional name parameter.
 	RenameSession(ctx context.Context, sessionID, name string) error
-}
-
-// queueAdmissionReadinessChecker lets queue producers recheck whether a
-// session became promptable while the queue entry was being admitted. The
-// method is optional so test and alternate launchers do not need to implement
-// the orchestrator's queue lifecycle.
-type queueAdmissionReadinessChecker interface {
-	CheckQueueAdmissionReadiness(context.Context, messagequeue.QueueSessionIdentity)
 }
 
 // TaskStopper exposes the narrow coordinator halt operation used by
@@ -262,28 +265,29 @@ type UserSettingsProvider interface {
 
 // Handlers provides MCP WebSocket handlers.
 type Handlers struct {
-	taskSvc              *service.Service
-	workflowCtrl         *workflowctrl.Controller
-	clarificationSvc     ClarificationService
-	sessionCanceller     SessionCanceller
-	inputPauser          ClarificationInputPauser
-	messageCreator       MessageCreator
-	sessionRepo          SessionRepository
-	taskRepo             TaskRepository
-	eventBus             EventBus
-	planService          *service.PlanService
-	walkthroughService   *service.WalkthroughService
-	sessionLauncher      SessionLauncher
-	taskStopper          TaskStopper
-	titleBranchRenamer   TaskTitleBranchRenamer
-	stopTaskGetter       func(context.Context, string) (*models.Task, error)
-	messageQueue         MessageQueuer
-	promptResolver       PromptReferenceResolver
-	promptReader         PromptReader
-	userSettingsProvider UserSettingsProvider
-	settingsRegistry     *settingscatalog.Registry
-	settingsOperations   SettingsOperations
-	logger               *logger.Logger
+	taskSvc                *service.Service
+	workflowCtrl           *workflowctrl.Controller
+	clarificationSvc       ClarificationService
+	sessionCanceller       SessionCanceller
+	inputPauser            ClarificationInputPauser
+	sessionCeilingReleaser SessionCeilingReleaser
+	messageCreator         MessageCreator
+	sessionRepo            SessionRepository
+	taskRepo               TaskRepository
+	eventBus               EventBus
+	planService            *service.PlanService
+	walkthroughService     *service.WalkthroughService
+	sessionLauncher        SessionLauncher
+	taskStopper            TaskStopper
+	titleBranchRenamer     TaskTitleBranchRenamer
+	stopTaskGetter         func(context.Context, string) (*models.Task, error)
+	messageQueue           MessageQueuer
+	promptResolver         PromptReferenceResolver
+	promptReader           PromptReader
+	userSettingsProvider   UserSettingsProvider
+	settingsRegistry       *settingscatalog.Registry
+	settingsOperations     SettingsOperations
+	logger                 *logger.Logger
 
 	// Config-mode dependencies (optional, set via SetConfigDeps)
 	workflowSvc         *workflowsvc.Service
@@ -311,12 +315,14 @@ type Handlers struct {
 	canvasAuthoringSvc CanvasAuthoringService
 
 	// Optional task-bound GitHub PR automation controls.
-	taskPRAutomation       TaskPRAutomationService
-	taskChangeLinks        TaskChangeLinkService
-	taskPRAutoFixOutcome   TaskPRAutoFixOutcomeService
-	remoteContributionSvc  RemoteContributionService
-	diagnosticBundles      DiagnosticBundleProvider
-	diagnosticMaterializer DiagnosticBundleMaterializer
+	taskPRAutomation            TaskPRAutomationService
+	taskChangeLinks             TaskChangeLinkService
+	taskChangeRequestReader     TaskChangeRequestReadService
+	taskChangeRequestAutomation TaskChangeRequestAutomationService
+	taskPRAutoFixOutcome        TaskPRAutoFixOutcomeService
+	remoteContributionSvc       RemoteContributionService
+	diagnosticBundles           DiagnosticBundleProvider
+	diagnosticMaterializer      DiagnosticBundleMaterializer
 	// Optional task-bound GitLab MR automation controls.
 	taskMRAutomation TaskMRAutomationService
 
@@ -390,6 +396,13 @@ func NewHandlers(
 // a clarification tool call ends without delivering an answer to the agent.
 func (h *Handlers) SetClarificationInputPauser(pauser ClarificationInputPauser) {
 	h.inputPauser = pauser
+}
+
+// SetSessionCeilingReleaser wires the orchestrator-owned session-ceiling
+// release used when this package's own clarification write moves a session
+// out of the counted population.
+func (h *Handlers) SetSessionCeilingReleaser(releaser SessionCeilingReleaser) {
+	h.sessionCeilingReleaser = releaser
 }
 
 func (h *Handlers) SetPromptReferenceResolver(resolver PromptReferenceResolver) {
@@ -488,9 +501,12 @@ func (h *Handlers) registerTaskReadHandlers(d *guardedMCPDispatcher) {
 	d.RegisterFunc(ws.ActionMCPListWorkflowSteps, h.handleListWorkflowSteps)
 	d.RegisterFunc(ws.ActionMCPListRepositories, h.handleListRepositories)
 	d.RegisterFunc(ws.ActionMCPListTasks, h.handleListTasks)
+	d.RegisterFunc(ws.ActionMCPGetTaskChangeRequests, h.handleGetTaskChangeRequests)
+	d.RegisterFunc(ws.ActionMCPUpdateTaskChangeRequestAutomation, h.handleUpdateTaskChangeRequestAutomation)
 	d.RegisterFunc(ws.ActionMCPGetTaskPRAutomation, h.handleGetTaskPRAutomation)
 	d.RegisterFunc(ws.ActionMCPUpdateTaskPRAutomation, h.handleUpdateTaskPRAutomation)
 	d.RegisterFunc(ws.ActionMCPReportPRAutoFixOutcome, h.handleReportTaskPRAutoFixOutcome)
+	d.RegisterFunc(ws.ActionMCPReportTaskChangeRequestAutoFixOutcome, h.handleReportTaskChangeRequestAutoFixOutcome)
 	d.RegisterFunc(ws.ActionMCPGetTaskMRAutomation, h.handleGetTaskMRAutomation)
 	d.RegisterFunc(ws.ActionMCPUpdateTaskMRAutomation, h.handleUpdateTaskMRAutomation)
 	d.RegisterFunc(ws.ActionMCPGetTaskConversation, h.handleGetTaskConversation)
@@ -510,6 +526,8 @@ func (h *Handlers) registerTaskMutationHandlers(d *guardedMCPDispatcher) {
 	d.RegisterFunc(ws.ActionMCPLinkTaskPR, h.handleLinkTaskPR)
 	d.RegisterFunc(ws.ActionMCPUnlinkTaskPR, h.handleUnlinkTaskPR)
 	d.RegisterFunc(ws.ActionMCPReplaceTaskPR, h.handleReplaceTaskPR)
+	d.RegisterFunc(ws.ActionMCPManageTaskChangeRequest, h.handleManageTaskChangeRequest)
+	d.RegisterFunc(ws.ActionMCPUpdateTaskChangeRequestAutomation, h.handleUpdateTaskChangeRequestAutomation)
 	d.RegisterFunc(ws.ActionMCPAddTaskDependency, h.handleAddTaskDependency)
 	d.RegisterFunc(ws.ActionMCPRemoveTaskDependency, h.handleRemoveTaskDependency)
 	d.RegisterFunc(ws.ActionMCPAddBranchToTask, h.handleAddBranchToTask)
@@ -3396,10 +3414,8 @@ func (h *Handlers) queueTaskMessage(ctx context.Context, taskID string, session 
 		}
 		return taskMessageDispatchResult{}, fmt.Errorf("failed to queue message: %w", err)
 	}
+	h.sessionLauncher.CheckQueueAdmissionReadiness(ctx, identity)
 	h.publishQueueStatusEvent(ctx, identity, queue)
-	if checker, ok := h.sessionLauncher.(queueAdmissionReadinessChecker); ok {
-		checker.CheckQueueAdmissionReadiness(ctx, identity)
-	}
 	return taskMessageDispatchResult{status: taskMessageStatusQueued, sessionID: session.ID, queuedEntryID: queued.ID}, nil
 }
 
@@ -4269,12 +4285,32 @@ func (h *Handlers) updateClarificationSessionState(
 	expected, state models.TaskSessionState,
 ) (bool, time.Time, error) {
 	if updater, ok := h.sessionRepo.(conditionalSessionStateUpdater); ok {
-		return updater.UpdateTaskSessionStateIfCurrent(ctx, sessionID, expected, state, "")
+		changed, updatedAt, err := updater.UpdateTaskSessionStateIfCurrent(ctx, sessionID, expected, state, "")
+		if err == nil && changed {
+			h.releaseSessionCeilingIfLeftPopulation(sessionID, expected, state)
+		}
+		return changed, updatedAt, err
 	}
 	if err := h.sessionRepo.UpdateTaskSessionState(ctx, sessionID, state, ""); err != nil {
 		return false, time.Time{}, err
 	}
+	h.releaseSessionCeilingIfLeftPopulation(sessionID, expected, state)
 	return true, time.Time{}, nil
+}
+
+// releaseSessionCeilingIfLeftPopulation is this package's half of AC-51a's
+// "mcp/handlers/handlers.go, various, SHALL release when leaving an AC-1
+// state" row: both the CAS-preferred branch and the raw fallback above count.
+func (h *Handlers) releaseSessionCeilingIfLeftPopulation(sessionID string, priorState, nextState models.TaskSessionState) {
+	if h.sessionCeilingReleaser == nil {
+		return
+	}
+	leftPopulation := priorState == models.TaskSessionStateStarting || priorState == models.TaskSessionStateRunning
+	enteredPopulation := nextState == models.TaskSessionStateStarting || nextState == models.TaskSessionStateRunning
+	if !leftPopulation || enteredPopulation {
+		return
+	}
+	h.sessionCeilingReleaser.ReleaseCeilingReservation(sessionID)
 }
 
 func (h *Handlers) sessionUpdatedAtForStateEvent(ctx context.Context, sessionID string) (string, bool) {
