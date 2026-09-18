@@ -109,6 +109,7 @@ function CanvasReleaseReview({
       <PluginPublisherIdentity
         identity={release.publisher_identity}
         author={release.author}
+        compact
         sourceName={
           release.publisher_identity?.status === "verified"
             ? t("plugins:officialSourceName")

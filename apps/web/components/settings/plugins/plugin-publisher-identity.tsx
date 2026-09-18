@@ -11,6 +11,7 @@ export type PluginPublisherIdentityProps = {
   sourceOrigin?: string;
   provenance?: PublisherProvenance;
   matchedSourceName?: string;
+  compact?: boolean;
   className?: string;
 };
 
@@ -26,6 +27,7 @@ export function PluginPublisherIdentity({
   sourceOrigin,
   provenance,
   matchedSourceName,
+  compact = false,
   className,
 }: PluginPublisherIdentityProps) {
   const { t } = useTranslation();
@@ -39,7 +41,7 @@ export function PluginPublisherIdentity({
 
   return (
     <div
-      className={`space-y-1 text-xs text-muted-foreground ${className ?? ""}`}
+      className={`${compact ? "flex flex-wrap items-center gap-x-3 gap-y-1" : "space-y-1"} text-xs text-muted-foreground ${className ?? ""}`}
       data-testid="plugin-publisher-identity"
     >
       <PublisherStatus identity={identity} verified={verified} />

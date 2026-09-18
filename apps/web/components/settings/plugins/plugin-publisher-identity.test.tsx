@@ -1,6 +1,8 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 import { PluginPublisherIdentity, publisherIdentitiesMatch } from "./plugin-publisher-identity";
+
+afterEach(cleanup);
 
 describe("PluginPublisherIdentity", () => {
   it("shows verified publisher, source, and declared author as separate facts", () => {
@@ -38,6 +40,18 @@ describe("PluginPublisherIdentity", () => {
     expect(screen.queryByText("Publisher: kandev")).toBeNull();
     expect(screen.getByText("Uploaded file")).toBeTruthy();
     expect(screen.getByText("kandev")).toBeTruthy();
+  });
+
+  it("supports a compact trust row", () => {
+    render(
+      <PluginPublisherIdentity
+        compact
+        identity={{ status: "unverified" }}
+        author="Example contributors"
+      />,
+    );
+
+    expect(screen.getByTestId("plugin-publisher-identity").className).toContain("flex flex-wrap");
   });
 });
 
