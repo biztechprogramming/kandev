@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { IconArrowLeft } from "@tabler/icons-react";
 import { Trans, useTranslation } from "react-i18next";
 import { Badge } from "@kandev/ui/badge";
@@ -17,6 +17,7 @@ import { SettingsCard } from "@/components/settings/settings-card";
 import { useSettingsSaveContributor } from "@/components/settings/settings-save-provider";
 import { PluginConfigForm } from "./plugin-config-form";
 import { PluginManifestCard } from "./plugin-manifest-card";
+import { PluginPublisherVerification } from "./plugin-publisher-verification";
 import { PluginShortcutsCard } from "./plugin-shortcuts-card";
 import { PluginRepoLink } from "./plugin-repo-link";
 import { PluginStatusBadge } from "./plugin-status-badge";
@@ -25,6 +26,9 @@ import { PluginUninstallConfirmation } from "./uninstall-plugin-dialog";
 import { usePluginActions } from "./use-plugin-actions";
 import { usePluginConfigForm } from "./use-plugin-config-form";
 import type { PluginRecord } from "@/lib/types/plugins";
+import { useAppStore } from "@/components/state-provider";
+import { ApiError } from "@/lib/api/client";
+import { verifyPluginPublisher } from "@/lib/api/domains/plugins-api";
 import { SETTINGS_TYPOGRAPHY } from "@/components/settings/settings-typography";
 import { controlSizingClassName } from "@kandev/ui/control-sizing";
 
@@ -43,7 +47,9 @@ export function PluginDetail({ pluginId }: { pluginId: string }) {
   const router = useRouter();
   const { isFinePointer } = useResponsiveBreakpoint();
   const actions = usePluginActions();
+  const updatePluginPublisher = useAppStore((state) => state.updatePluginPublisher);
   const plugin = items.find((p) => p.id === pluginId) ?? null;
+  const publisherVerification = usePluginPublisherVerification(plugin, updatePluginPublisher);
   const [confirmingUninstall, setConfirmingUninstall] = useState(false);
   const uninstallAnchorRef = useRef<HTMLButtonElement>(null);
   const form = usePluginConfigForm(canManage ? plugin : null);
@@ -82,6 +88,14 @@ export function PluginDetail({ pluginId }: { pluginId: string }) {
         </>
       )}
       <PluginShortcutsCard plugin={plugin} plugins={items} />
+      <PluginPublisherVerification
+        plugin={plugin}
+        canManage={canManage}
+        busy={publisherVerification.busy}
+        error={publisherVerification.error}
+        success={publisherVerification.success}
+        onVerify={publisherVerification.verify}
+      />
       <PluginManifestCard plugin={plugin} />
 
       {canManage && (
@@ -114,6 +128,99 @@ export function PluginDetail({ pluginId }: { pluginId: string }) {
       )}
     </div>
   );
+}
+
+function usePluginPublisherVerification(
+  plugin: PluginRecord | null,
+  updatePluginPublisher: (
+    id: string,
+    expectedInstallationID: string,
+    expectedVersion: string,
+    publisherIdentity: PluginRecord["publisher_identity"],
+    publisherProvenance: PluginRecord["publisher_provenance"],
+  ) => boolean,
+) {
+  const { t } = useTranslation();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const [success, setSuccess] = useState(false);
+  const mountedRef = useRef(true);
+  const requestGeneration = useRef(0);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    requestGeneration.current += 1;
+  }, [plugin?.id, plugin?.installation_id, plugin?.version]);
+
+  const verify = async () => {
+    if (!plugin?.installation_id) return;
+    const requestID = ++requestGeneration.current;
+    const expectedInstallationID = plugin.installation_id;
+    const expectedVersion = plugin.version;
+    setBusy(true);
+    setError(undefined);
+    setSuccess(false);
+    try {
+      const updated = await verifyPluginPublisher(plugin.id, {
+        expected_installation_id: expectedInstallationID,
+        expected_version: expectedVersion,
+      });
+      if (
+        mountedRef.current &&
+        requestID === requestGeneration.current &&
+        updatePluginPublisher(
+          plugin.id,
+          expectedInstallationID,
+          expectedVersion,
+          updated.publisher_identity,
+          updated.publisher_provenance,
+        )
+      ) {
+        setSuccess(true);
+      }
+    } catch (reason) {
+      if (mountedRef.current && requestID === requestGeneration.current) {
+        setError(publisherVerificationMessage(reason, t));
+      }
+    } finally {
+      if (mountedRef.current && requestID === requestGeneration.current) {
+        setBusy(false);
+      }
+    }
+  };
+
+  return { busy, error, success, verify };
+}
+
+function publisherVerificationMessage(reason: unknown, t: (key: string) => string): string {
+  const code =
+    reason instanceof ApiError &&
+    reason.body &&
+    typeof reason.body === "object" &&
+    "code" in reason.body &&
+    typeof (reason.body as { code?: unknown }).code === "string"
+      ? (reason.body as { code: string }).code
+      : "";
+  switch (code) {
+    case "publisher_evidence_unavailable":
+    case "catalog_unavailable":
+      return t("plugins:publisherVerificationUnavailable");
+    case "installed_package_mismatch":
+    case "package_identity_mismatch":
+      return t("plugins:publisherVerificationMismatch");
+    case "installed_package_unreadable":
+      return t("plugins:publisherVerificationUnreadable");
+    case "installed_package_changed":
+    case "publisher_changed":
+      return t("plugins:publisherVerificationChanged");
+    default:
+      return t("plugins:publisherVerificationFailed");
+  }
 }
 
 type PluginDetailHeaderProps = {

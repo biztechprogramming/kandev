@@ -31,6 +31,9 @@ function plugin(id: string, overrides: Partial<PluginRecord> = {}): PluginRecord
   };
 }
 
+const INSTALLED_VERSION = "1.0.0";
+const INSTALLED_ID = "installation-a";
+
 describe("plugins slice", () => {
   it("starts empty, not loading, not loaded, no error", () => {
     const store = makeStore();
@@ -88,5 +91,76 @@ describe("plugins slice", () => {
     store.getState().setPlugins([plugin("a"), plugin("b"), plugin("c")]);
     store.getState().removePlugin("b");
     expect(store.getState().plugins.items.map((p) => p.id)).toEqual(["a", "c"]);
+  });
+});
+
+describe("plugins slice publisher updates", () => {
+  it("updates only publisher fields for the matching installation snapshot", () => {
+    const store = makeStore();
+    store.getState().setPlugins([
+      plugin("a", {
+        version: INSTALLED_VERSION,
+        installation_id: INSTALLED_ID,
+        status: "active",
+        auto_update: false,
+      }),
+    ]);
+    const applied = store
+      .getState()
+      .updatePluginPublisher(
+        "a",
+        INSTALLED_ID,
+        INSTALLED_VERSION,
+        { status: "verified", login: "acme" },
+        { origin: "upload", package_id: "a", version: INSTALLED_VERSION },
+      );
+    expect(applied).toBe(true);
+    expect(store.getState().plugins.items[0]).toMatchObject({
+      status: "active",
+      auto_update: false,
+      publisher_identity: { status: "verified", login: "acme" },
+    });
+  });
+
+  it("ignores delayed publisher responses for an uninstall or replacement", () => {
+    const store = makeStore();
+    store
+      .getState()
+      .setPlugins([plugin("a", { version: INSTALLED_VERSION, installation_id: INSTALLED_ID })]);
+    store.getState().removePlugin("a");
+    expect(
+      store
+        .getState()
+        .updatePluginPublisher(
+          "a",
+          INSTALLED_ID,
+          INSTALLED_VERSION,
+          { status: "verified", login: "acme" },
+          { origin: "upload", package_id: "a", version: INSTALLED_VERSION },
+        ),
+    ).toBe(false);
+    expect(store.getState().plugins.items).toHaveLength(0);
+
+    store
+      .getState()
+      .setPlugins([
+        plugin("a", { version: "2.0.0", installation_id: "installation-b", status: "active" }),
+      ]);
+    expect(
+      store
+        .getState()
+        .updatePluginPublisher(
+          "a",
+          INSTALLED_ID,
+          INSTALLED_VERSION,
+          { status: "verified", login: "acme" },
+          { origin: "upload", package_id: "a", version: INSTALLED_VERSION },
+        ),
+    ).toBe(false);
+    expect(store.getState().plugins.items[0]).toMatchObject({
+      version: "2.0.0",
+      installation_id: "installation-b",
+      status: "active",
+    });
   });
 });

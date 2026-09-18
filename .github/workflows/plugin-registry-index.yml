@@ -57,13 +57,16 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Build canvas package inspector
+      - name: Build package inspectors
         working-directory: apps/backend
-        run: go build -o bin/canvas-package ./cmd/canvas-package
+        run: |
+          go build -o bin/canvas-package ./cmd/canvas-package
+          go build -o bin/plugin-package ./cmd/plugin-package
 
       - name: Test build script
         env:
           KANDEV_CANVAS_PACKAGE_INSPECTOR: apps/backend/bin/canvas-package
+          KANDEV_PLUGIN_PACKAGE_INSPECTOR: apps/backend/bin/plugin-package
         run: node --test plugin-registry/build-index.test.mjs
 
       - name: Build index.json
@@ -75,6 +78,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           KANDEV_CANVAS_PACKAGE_INSPECTOR: apps/backend/bin/canvas-package
+          KANDEV_PLUGIN_PACKAGE_INSPECTOR: apps/backend/bin/plugin-package
         run: node plugin-registry/build-index.mjs
 
       - name: Stage Pages site

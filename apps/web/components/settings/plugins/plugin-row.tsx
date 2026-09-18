@@ -20,6 +20,11 @@ import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
 import type { MarketplaceEntry, PluginRecord } from "@/lib/types/plugins";
 import { SETTINGS_TYPOGRAPHY } from "@/components/settings/settings-typography";
 import { controlSizingClassName } from "@kandev/ui/control-sizing";
+import {
+  PluginPublisherIdentity,
+  PublisherBadge,
+  publisherIdentitiesMatch,
+} from "./plugin-publisher-identity";
 
 /**
  * The row's view of its marketplace-update status, computed by
@@ -241,6 +246,17 @@ function PluginRowContent({
         {plugin.description && (
           <div className="text-xs text-muted-foreground">{plugin.description}</div>
         )}
+        <PluginPublisherIdentity
+          identity={plugin.publisher_identity}
+          provenance={plugin.publisher_provenance}
+          author={plugin.author}
+        />
+        {update?.latest && (
+          <PublisherUpdateNotice
+            current={plugin.publisher_identity}
+            candidate={update.latest.publisher_identity}
+          />
+        )}
         <PluginErrorDiagnostic plugin={plugin} />
         {update?.error && (
           <div
@@ -271,6 +287,60 @@ function PluginRowContent({
         )}
       </div>
     </>
+  );
+}
+
+function PublisherUpdateNotice({
+  current,
+  candidate,
+}: {
+  current?: PluginRecord["publisher_identity"];
+  candidate?: MarketplaceEntry["publisher_identity"];
+}) {
+  const { t } = useTranslation();
+  const currentIdentity = current ?? { status: "unverified" as const };
+  const candidateIdentity = candidate ?? { status: "unverified" as const };
+  const changed = !publisherIdentitiesMatch(currentIdentity, candidateIdentity);
+  return (
+    <div
+      className="space-y-1 rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs"
+      data-testid="plugin-publisher-update-notice"
+    >
+      <PublisherVersionLine
+        label={t("plugins:installedPublisherLabel")}
+        identity={currentIdentity}
+      />
+      <PublisherVersionLine
+        label={t("plugins:candidatePublisherLabel")}
+        identity={candidateIdentity}
+      />
+      {changed && (
+        <p className="font-medium text-amber-700 dark:text-amber-400">
+          {t("plugins:publisherUpdateChanged")}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function PublisherVersionLine({
+  label,
+  identity,
+}: {
+  label: string;
+  identity: NonNullable<PluginRecord["publisher_identity"]>;
+}) {
+  const { t } = useTranslation();
+  const publisher =
+    identity.status === "verified" && identity.login
+      ? identity.login
+      : t("plugins:unverifiedPublisher");
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <span>{label}:</span>
+      <span className="font-medium text-foreground">{publisher}</span>
+      <PublisherBadge identity={identity} />
+    </div>
   );
 }
 

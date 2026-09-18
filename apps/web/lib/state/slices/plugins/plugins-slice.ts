@@ -39,6 +39,29 @@ export const createPluginsSlice: StateCreator<
         draft.plugins.items.push(plugin);
       }
     }),
+  updatePluginPublisher: (
+    id,
+    expectedInstallationID,
+    expectedVersion,
+    publisherIdentity,
+    publisherProvenance,
+  ) => {
+    let applied = false;
+    set((draft) => {
+      const current = draft.plugins.items.find((plugin) => plugin.id === id);
+      if (
+        !current ||
+        current.installation_id !== expectedInstallationID ||
+        current.version !== expectedVersion
+      ) {
+        return;
+      }
+      current.publisher_identity = publisherIdentity;
+      current.publisher_provenance = publisherProvenance;
+      applied = true;
+    });
+    return applied;
+  },
   removePlugin: (id) =>
     set((draft) => {
       draft.plugins.items = draft.plugins.items.filter((p) => p.id !== id);
