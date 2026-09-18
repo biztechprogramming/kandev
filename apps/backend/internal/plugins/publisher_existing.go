@@ -38,7 +38,7 @@ func (s *Service) VerifyInstalledPublisher(ctx context.Context, id, expectedInst
 	if err != nil {
 		return nil, err
 	}
-	return s.persistInstalledPublisherVerification(id, initial, resolution, inspection.Files, digest)
+	return s.persistInstalledPublisherVerification(id, initial, resolution, inspection.Files, inspection.Modes, digest)
 }
 
 func matchesExpectedInstalledIdentity(record *store.Record, id, installationID, version string) bool {
@@ -85,30 +85,65 @@ func hasVerifiedResolutionEvidence(resolution *marketplace.PluginPackageResoluti
 		resolution.Provenance != nil && resolution.Provenance.Publisher != nil
 }
 
-func (s *Service) persistInstalledPublisherVerification(id string, initial *store.Record, resolution *marketplace.PluginPackageResolution, expected map[string][]byte, digest string) (*store.Record, error) {
+func (s *Service) persistInstalledPublisherVerification(id string, initial *store.Record, resolution *marketplace.PluginPackageResolution, expected map[string][]byte, expectedModes map[string]os.FileMode, digest string) (*store.Record, error) {
 
 	lock := s.lifecycleLocks.lockFor(id)
 	lock.Lock()
 	defer lock.Unlock()
+	dispatchLock := s.dispatchLocks.lockFor(id)
+	dispatchLock.Lock()
+	defer dispatchLock.Unlock()
 	current, ok := s.registry.Get(id)
 	if !ok || !sameInstalledIdentity(initial, current) {
 		return nil, publisherError(PublisherCodeInstalledChanged, ErrInstalledPackageChanged)
 	}
-	if err := compareInstalledPackage(current.InstallPath, expected); err != nil {
+	restart, err := s.pauseRuntimeForPublisherVerification(current)
+	if err != nil {
 		return nil, err
 	}
+	verificationErr := compareInstalledPackage(current.InstallPath, expected, expectedModes)
+	if verificationErr == nil {
+		verificationErr = s.saveInstalledPublisherVerification(current, resolution, digest)
+	}
+	if restartErr := restart(); verificationErr == nil && restartErr != nil {
+		verificationErr = publisherError(PublisherCodeVerificationFailed, restartErr)
+	}
+	if verificationErr != nil {
+		return nil, verificationErr
+	}
+	return current, nil
+}
 
+func (s *Service) saveInstalledPublisherVerification(current *store.Record, resolution *marketplace.PluginPackageResolution, digest string) error {
 	updated := installedPublisherProvenance(current, resolution, digest)
 	if err := updated.Validate(); err != nil {
-		return nil, publisherError(PublisherCodeVerificationFailed, err)
+		return publisherError(PublisherCodeVerificationFailed, err)
 	}
 	current.PublisherProvenance = updated
 	current.PublisherIdentity = updated.Identity()
 	if err := s.store.Save(current); err != nil {
-		return nil, publisherError(PublisherCodeVerificationFailed, fmt.Errorf("persist publisher verification: %w", err))
+		return publisherError(PublisherCodeVerificationFailed, fmt.Errorf("persist publisher verification: %w", err))
 	}
 	s.registry.Add(current)
-	return current, nil
+	return nil
+}
+
+func (s *Service) pauseRuntimeForPublisherVerification(current *store.Record) (func() error, error) {
+	if s.runtime == nil || !s.runtime.Running(current.ID) {
+		return func() error { return nil }, nil
+	}
+	s.runtime.Stop(current.ID)
+	return func() error {
+		ctx, cancel := context.WithTimeout(context.Background(), activateStartTimeout)
+		defer cancel()
+		if err := s.runtime.Start(ctx, current, s.hostForPlugin); err != nil {
+			if setErr := s.setStatusAndDiagnostic(current.ID, StatusError, err, true); setErr != nil {
+				return fmt.Errorf("restart plugin %q after publisher verification: %w (persist status: %v)", current.ID, err, setErr)
+			}
+			return fmt.Errorf("restart plugin %q after publisher verification: %w", current.ID, err)
+		}
+		return nil
+	}, nil
 }
 
 func installedPublisherProvenance(current *store.Record, resolution *marketplace.PluginPackageResolution, digest string) *provenance.InstallationProvenance {
@@ -154,11 +189,11 @@ func sameInstalledIdentity(a, b *store.Record) bool {
 // version directory with the validated archive inventory. It deliberately
 // ignores timestamps and empty directories, while rejecting links and special
 // files so a path cannot resolve outside the installed version.
-func compareInstalledPackage(root string, expected map[string][]byte) error {
-	return compareInstalledPackageWithAfterReadHook(root, expected, nil)
+func compareInstalledPackage(root string, expected map[string][]byte, expectedModes map[string]os.FileMode) error {
+	return compareInstalledPackageWithAfterReadHook(root, expected, expectedModes, nil)
 }
 
-func compareInstalledPackageWithAfterReadHook(root string, expected map[string][]byte, afterRead func(string)) error {
+func compareInstalledPackageWithAfterReadHook(root string, expected map[string][]byte, expectedModes map[string]os.FileMode, afterRead func(string)) error {
 	rootInfo, err := os.Lstat(root)
 	if err != nil {
 		return publisherError(PublisherCodeInstalledUnreadable, fmt.Errorf("%w: %v", ErrInstalledPackageUnreadable, err))
@@ -189,7 +224,8 @@ func compareInstalledPackageWithAfterReadHook(root string, expected map[string][
 			return publisherError(PublisherCodeInstalledMismatch, ErrInstalledPackageMismatch)
 		}
 		seen[rel] = true
-		return compareInstalledFile(path, want, afterRead)
+		wantMode, modeRequired := expectedModes[rel]
+		return compareInstalledFile(path, want, wantMode, modeRequired, afterRead)
 	})
 	if walkErr != nil {
 		return walkErr
@@ -224,34 +260,14 @@ func installedRelativePath(root, path string) (string, error) {
 	return filepath.ToSlash(rel), nil
 }
 
-func compareInstalledFile(path string, want []byte, afterRead func(string)) error {
-	before, err := os.Lstat(path)
+func compareInstalledFile(path string, want []byte, wantMode os.FileMode, modeRequired bool, afterRead func(string)) error {
+	before, err := statInstalledFile(path, wantMode, modeRequired, int64(len(want)))
 	if err != nil {
-		return publisherError(PublisherCodeInstalledUnreadable, fmt.Errorf("%w: %v", ErrInstalledPackageUnreadable, err))
-	}
-	if before.Mode().Perm()&0444 == 0 {
-		return publisherError(PublisherCodeInstalledUnreadable, ErrInstalledPackageUnreadable)
-	}
-	if before.Size() != int64(len(want)) {
-		return publisherError(PublisherCodeInstalledMismatch, ErrInstalledPackageMismatch)
-	}
-	file, err := os.Open(path)
-	if err != nil {
-		return publisherError(PublisherCodeInstalledUnreadable, fmt.Errorf("%w: %v", ErrInstalledPackageUnreadable, err))
-	}
-	if err := validateOpenedInstalledFile(path, before, file); err != nil {
-		_ = file.Close()
 		return err
 	}
-	data, readErr := io.ReadAll(io.LimitReader(file, int64(len(want))+1))
-	openedAfter, statErr := file.Stat()
-	pathAfter, pathErr := os.Lstat(path)
-	closeErr := file.Close()
-	if readErr != nil || closeErr != nil {
-		return publisherError(PublisherCodeInstalledUnreadable, ErrInstalledPackageUnreadable)
-	}
-	if statErr != nil || pathErr != nil || !sameInstalledFileState(before, openedAfter, pathAfter) {
-		return publisherError(PublisherCodeInstalledChanged, ErrInstalledPackageChanged)
+	data, err := readInstalledFile(path, before, len(want))
+	if err != nil {
+		return err
 	}
 	if !bytes.Equal(data, want) {
 		return publisherError(PublisherCodeInstalledMismatch, ErrInstalledPackageMismatch)
@@ -264,6 +280,45 @@ func compareInstalledFile(path string, want []byte, afterRead func(string)) erro
 		return publisherError(PublisherCodeInstalledChanged, ErrInstalledPackageChanged)
 	}
 	return nil
+}
+
+func statInstalledFile(path string, wantMode os.FileMode, modeRequired bool, wantSize int64) (os.FileInfo, error) {
+	before, err := os.Lstat(path)
+	if err != nil {
+		return nil, publisherError(PublisherCodeInstalledUnreadable, fmt.Errorf("%w: %v", ErrInstalledPackageUnreadable, err))
+	}
+	if !before.Mode().IsRegular() || before.Mode().Perm()&0444 == 0 {
+		return nil, publisherError(PublisherCodeInstalledUnreadable, ErrInstalledPackageUnreadable)
+	}
+	if modeRequired && before.Mode().Perm() != wantMode.Perm() {
+		return nil, publisherError(PublisherCodeInstalledMismatch, ErrInstalledPackageMismatch)
+	}
+	if before.Size() != wantSize {
+		return nil, publisherError(PublisherCodeInstalledMismatch, ErrInstalledPackageMismatch)
+	}
+	return before, nil
+}
+
+func readInstalledFile(path string, before os.FileInfo, wantSize int) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, publisherError(PublisherCodeInstalledUnreadable, fmt.Errorf("%w: %v", ErrInstalledPackageUnreadable, err))
+	}
+	if err := validateOpenedInstalledFile(path, before, file); err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+	data, readErr := io.ReadAll(io.LimitReader(file, int64(wantSize)+1))
+	openedAfter, statErr := file.Stat()
+	pathAfter, pathErr := os.Lstat(path)
+	closeErr := file.Close()
+	if readErr != nil || closeErr != nil {
+		return nil, publisherError(PublisherCodeInstalledUnreadable, ErrInstalledPackageUnreadable)
+	}
+	if statErr != nil || pathErr != nil || !sameInstalledFileState(before, openedAfter, pathAfter) {
+		return nil, publisherError(PublisherCodeInstalledChanged, ErrInstalledPackageChanged)
+	}
+	return data, nil
 }
 
 func validateOpenedInstalledFile(path string, before os.FileInfo, file *os.File) error {

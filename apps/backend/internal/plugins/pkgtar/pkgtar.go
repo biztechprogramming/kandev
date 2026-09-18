@@ -114,7 +114,10 @@ type InstallResult struct {
 type Inspection struct {
 	Manifest *manifest.Manifest
 	Files    map[string][]byte
-	Signed   bool
+	// Modes mirrors the installer's normalized permissions: executable paths
+	// are 0755 and every other regular archive entry is 0644.
+	Modes  map[string]os.FileMode
+	Signed bool
 }
 
 // InspectPackage validates a complete plugin archive without executing or
@@ -134,7 +137,7 @@ func InspectPackage(r io.Reader) (*Inspection, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Inspection{Manifest: m, Files: files, Signed: signed}, nil
+	return &Inspection{Manifest: m, Files: files, Modes: packageFileModes(m, files), Signed: signed}, nil
 }
 
 // Inspect validates a complete archive and returns its manifest. It retains
@@ -368,6 +371,9 @@ func writePackageFiles(root string, files map[string][]byte, execSet map[string]
 		if err := os.WriteFile(dest, data, mode); err != nil {
 			return fmt.Errorf("pkgtar: writing %s: %w", name, err)
 		}
+		if err := os.Chmod(dest, mode); err != nil {
+			return fmt.Errorf("pkgtar: setting mode for %s: %w", name, err)
+		}
 	}
 	return nil
 }
@@ -404,6 +410,19 @@ func executablePaths(m *manifest.Manifest) map[string]bool {
 		set[p] = true
 	}
 	return set
+}
+
+func packageFileModes(m *manifest.Manifest, files map[string][]byte) map[string]os.FileMode {
+	executableSet := executablePaths(m)
+	modes := make(map[string]os.FileMode, len(files))
+	for name := range files {
+		mode := os.FileMode(0o644)
+		if executableSet[name] {
+			mode = 0o755
+		}
+		modes[name] = mode
+	}
+	return modes
 }
 
 // Remove deletes destRoot/<id>/ entirely: every installed version plus the

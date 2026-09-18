@@ -95,7 +95,7 @@ Archive metadata is authoritative even when the tag's manifest differs.
 
 PR validation rejects unauthorized claims and invalid changed entries.
 Scheduled publication omits invalid entries, reports the reason, and publishes valid entries without restoring a stale rejected descriptor.
-A star lookup failure can still yield null stars. An ownership lookup failure cannot yield a verified publisher.
+A star lookup failure retains the previous star count when one exists; it yields null only when no prior count is available. An ownership lookup failure cannot yield a verified publisher.
 Registry validation must use trusted inspector/workflow code when it processes untrusted registry changes.
 
 ## Catalog projection and contracts
@@ -197,7 +197,7 @@ The runtime's separate `<pluginsDir>/<id>/data` directory, configured through `K
 
 After downloading, acquire the existing lifecycle lock and reread the installed record.
 Require its installation ID, version, path, and prior provenance to match the captured identity.
-Compare files and save evidence while holding that lock, without stopping or starting the runtime.
+If the plugin is running, stop it before comparing files and saving evidence, then restart it after the operation. This closes the process-to-filesystem race while preserving its active lifecycle state after success.
 Reject observed file replacement or mutation during comparison using file identity and before/after metadata checks.
 The check attests the on-disk package at comparison time, not the memory of a running process.
 Arbitrary concurrent host-filesystem attackers remain outside the existing host trust boundary.

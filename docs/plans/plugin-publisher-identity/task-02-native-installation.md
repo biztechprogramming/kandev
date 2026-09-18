@@ -51,7 +51,7 @@ Canvas transactions, frontend callers, and signing-key infrastructure.
 
 - Forged source metadata, URL overrides, redirects, and client publisher fields cannot establish verification.
 - A mismatch or failed fresh resolution leaves existing runtime, record, preferences, and attribution unchanged.
-- Restart preserves valid evidence. Existing-version verification changes only attribution and preserves original origin, without reinstall or restart.
+- Restart preserves valid evidence. Existing-version verification changes only attribution and preserves original origin, without reinstall; a running process is briefly paused and restarted while installed files are compared.
 
 ## Verification
 
@@ -72,7 +72,7 @@ Cover success/reload, missing historical version, modified files, and lifecycle
 races. Existing installation and autoupdate suites cover continuity and update
 eligibility.
 Prove sibling runtime data is excluded, in-package data is included, and persistence failure publishes no verified projection.
-Assert no install, activation, restart, permission, or configuration mutation on success or failure.
+Assert no install, reinstall, permission, or configuration mutation on success or failure. A running process is stopped for comparison and restarted with its active lifecycle state preserved.
 
 ## Files likely touched
 

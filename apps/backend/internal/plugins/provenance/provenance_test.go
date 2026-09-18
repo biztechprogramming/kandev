@@ -19,11 +19,15 @@ func TestEvidenceValidateRequiresCompleteRegistryIdentity(t *testing.T) {
 	}
 
 	for name, mutate := range map[string]func(*Evidence){
-		"schema":        func(e *Evidence) { e.SchemaVersion = 2 },
-		"repository id": func(e *Evidence) { e.RepositoryID = "" },
-		"owner id":      func(e *Evidence) { e.OwnerID = "owner" },
-		"login":         func(e *Evidence) { e.Login = "" },
-		"repository":    func(e *Evidence) { e.Repository = "other/example" },
+		"schema":                   func(e *Evidence) { e.SchemaVersion = 2 },
+		"repository id":            func(e *Evidence) { e.RepositoryID = "" },
+		"owner id":                 func(e *Evidence) { e.OwnerID = "owner" },
+		"login":                    func(e *Evidence) { e.Login = "" },
+		"repository":               func(e *Evidence) { e.Repository = "other/example" },
+		"repository id whitespace": func(e *Evidence) { e.RepositoryID = " 123" },
+		"owner id whitespace":      func(e *Evidence) { e.OwnerID = "456 " },
+		"login whitespace":         func(e *Evidence) { e.Login = " acme" },
+		"repository whitespace":    func(e *Evidence) { e.Repository = "acme/example " },
 	} {
 		t.Run(name, func(t *testing.T) {
 			candidate := valid

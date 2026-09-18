@@ -71,7 +71,7 @@ catalog digest enforcement.
 
 #### Acceptance criteria
 
-- **AC-PLUGINS-PUBLISHER-004.1:** An administrator shall be able to request publisher verification for an installed native plugin without updating, reinstalling, or restarting it.
+- **AC-PLUGINS-PUBLISHER-004.1:** An administrator shall be able to request publisher verification for an installed native plugin without updating or reinstalling it. If it is running, the host shall briefly stop and restart it during the file comparison.
 - **AC-PLUGINS-PUBLISHER-004.2:** Verification shall require trusted evidence for the exact installed version and matching installed package files. Matching names or versions alone shall not qualify.
 - **AC-PLUGINS-PUBLISHER-004.3:** Missing evidence, different files, or concurrent replacement shall leave the plugin usable and unverified, with an explanation and retry action.
 - **AC-PLUGINS-PUBLISHER-004.4:** Success shall persist verification across restart while preserving version, runtime status, permissions, preferences, runtime data, and original installation source.

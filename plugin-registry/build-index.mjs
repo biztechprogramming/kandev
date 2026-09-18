@@ -17,8 +17,8 @@
 // fails a scheduled build — its error is logged to stderr and it is skipped. A
 // pull request fails when it introduces any invalid entry, so registry
 // validation cannot silently omit a reviewed listing. A repo whose star lookup
-// fails is emitted with `stars: null`, never `0`, so a transient outage can't
-// corrupt the catalog's ranking.
+// fails retains its previous count when one is available and otherwise uses
+// `stars: null`, never inventing `0` for a transient outage.
 //
 // Auth: GitHub API calls use GITHUB_TOKEN when present (in CI, secrets.GITHUB_TOKEN).
 // That works for the public repos here; at larger scale a PAT with `public_repo`
@@ -52,6 +52,7 @@ const MAX_CANVAS_PACKAGE_BYTES = 10 * 1024 * 1024;
 const PLUGIN_DOWNLOAD_TIMEOUT_MS = 60_000;
 const PACKAGE_INSPECTOR_TIMEOUT_MS = 30_000;
 const CANVAS_INSPECTOR_TIMEOUT_MS = 30_000;
+const PREVIOUS_INDEX_URL = "https://kdlbs.github.io/kandev/plugins/index.json";
 
 // --- Minimal plugins.yaml parser --------------------------------------------
 
@@ -408,7 +409,7 @@ export async function buildEntry(spec) {
     // catalog discovery available for development and legacy tests, but fail
     // an explicitly official entry rather than publishing an unverified
     // first-party listing from an incomplete build environment.
-    if (official)
+    if (official || kind === "canvas")
       return { error: `${pluginId}: ${inspectorName} is not configured` };
     const manifest = tag ? await fetchManifest(repo, tag) : {};
     inspected = {
@@ -631,10 +632,15 @@ async function fetchRepoMeta(repo, pluginId) {
 
 // --- Orchestration -----------------------------------------------------------
 
-export async function buildIndex(specs) {
+export async function buildIndex(specs, previousDocument) {
   const records = [];
   const errors = [];
   const canvasErrors = [];
+  const previousStars = new Map(
+    (previousDocument?.plugins ?? [])
+      .filter((entry) => entry && typeof entry.id === "string" && Number.isInteger(entry.stars))
+      .map((entry) => [entry.id, entry.stars]),
+  );
   for (const spec of specs) {
     const { record, error } = await buildEntry(spec);
     if (error) {
@@ -642,6 +648,9 @@ export async function buildIndex(specs) {
       if ((spec.kind || "plugin") === "canvas") canvasErrors.push(error);
       console.error(`skip: ${error}`);
       continue;
+    }
+    if (record.stars === null && previousStars.has(record.id)) {
+      record.stars = previousStars.get(record.id);
     }
     records.push(record);
   }
@@ -670,7 +679,9 @@ export async function main(options = {}) {
   // An empty list is expected at launch (no plugin repos yet) — it produces a
   // valid, empty index.json and is NOT an error. Only a non-empty list that
   // resolves to zero entries (below) indicates a real failure.
-  const { document, errors } = await buildIndex(specs);
+  const previousDocument =
+    options.previousDocument ?? (options.specs ? undefined : await loadPreviousDocument());
+  const { document, errors } = await buildIndex(specs, previousDocument);
   await fs.writeFile(
     outputPath,
     `${JSON.stringify(document, null, 2)}\n`,
@@ -696,6 +707,22 @@ export async function main(options = {}) {
   }
   if (exitCode !== 0) process.exitCode = exitCode;
   return { document, errors, exitCode };
+}
+
+async function loadPreviousDocument() {
+  try {
+    const response = await fetchWithTimeout(
+      PREVIOUS_INDEX_URL,
+      { headers: { Accept: "application/json", "User-Agent": USER_AGENT } },
+      PLUGIN_DOWNLOAD_TIMEOUT_MS,
+    );
+    if (!response.ok) return undefined;
+    const document = await response.json();
+    return document && typeof document === "object" ? document : undefined;
+  } catch (error) {
+    console.error(`warning: previous catalog lookup failed (${error.message})`);
+    return undefined;
+  }
 }
 
 // Run only when invoked directly (not when imported by a test).

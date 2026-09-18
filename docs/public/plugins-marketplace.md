@@ -307,9 +307,9 @@ simplest way to produce one is to copy the official registry's
 build script (zero-dependency Node) + GitHub Action resolve each listed repo's
 latest release into a full catalog record and publish the generated
 `index.json` to GitHub Pages. Point kandev at that Pages URL. Entries from this
-source are shown as unverified unless the installation also matches the
-canonical official HTTPS catalog. The document shape, the build pipeline, and
-the source data model are specified in the
+source are shown as unverified. A package installed from this source remains
+unverified, even when the package also appears in the canonical official HTTPS
+catalog. The document shape, the build pipeline, and the source data model are specified in the
 [plugin marketplace spec](https://github.com/kdlbs/kandev/blob/main/docs/specs/plugins/requirements/marketplace.md).
 
 Related: [Plugins](plugins.md), [Authoring a

@@ -100,12 +100,13 @@ catalog source together. The host can show a **Verified publisher** label only
 when those facts match at installation time. **Official Kandev** requires an
 explicitly curated repository owned by `kdlbs`.
 
-Signatures and package checksums have separate meanings. Checksums establish
-that package contents match the inspected archive. A signature, when present,
-does not replace the official catalog's publisher evidence. Uploads, direct
-URLs, custom sources, and legacy installations remain unverified until an
-administrator verifies the exact installed version against the canonical
-catalog.
+Signatures and package checksums have separate meanings. The package checksum
+list establishes that extracted files match the archive's declared file
+hashes. The canonical catalog's archive SHA-256 binds publisher evidence to the
+release bytes. A signature, when present, does not replace that catalog
+evidence. Uploads, direct URLs, custom sources, and legacy installations
+remain unverified until an administrator verifies the exact installed version
+against the canonical catalog.
 
 Kandev injects KANDEV_PLUGIN_DATA_DIR into the subprocess. It is the durable,
 per-plugin directory for arbitrary files or a plugin-owned database:

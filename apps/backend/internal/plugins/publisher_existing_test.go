@@ -43,8 +43,8 @@ func TestPublisherExistingVersionVerification(t *testing.T) {
 	if verified.PublisherProvenance == nil || verified.PublisherProvenance.Origin != provenance.OriginUpload || verified.PublisherProvenance.VerificationMethod != provenance.VerificationInstalledFiles {
 		t.Fatalf("verification changed origin/method incorrectly: %+v", verified.PublisherProvenance)
 	}
-	if got := rt.startCallCount(rec.ID); got != startCalls || rt.stopped(rec.ID) {
-		t.Fatalf("verification changed lifecycle: start calls %d (want %d), stopped=%v", got, startCalls, rt.stopped(rec.ID))
+	if got := rt.startCallCount(rec.ID); got != startCalls+1 || !rt.stopped(rec.ID) || !rt.Running(rec.ID) {
+		t.Fatalf("verification did not pause and restore lifecycle: start calls %d (want %d), stopped=%v, running=%v", got, startCalls+1, rt.stopped(rec.ID), rt.Running(rec.ID))
 	}
 	if _, err := os.Stat(dir); err != nil {
 		t.Fatalf("plugin directory disappeared: %v", err)
@@ -106,7 +106,7 @@ func TestCompareInstalledPackageRejectsSameSizeMutationAfterRead(t *testing.T) {
 		t.Fatalf("write fixture: %v", err)
 	}
 
-	err := compareInstalledPackageWithAfterReadHook(root, map[string][]byte{"plugin.bin": want}, func(path string) {
+	err := compareInstalledPackageWithAfterReadHook(root, map[string][]byte{"plugin.bin": want}, map[string]os.FileMode{"plugin.bin": 0o755}, func(path string) {
 		if err := os.WriteFile(path, mutated, 0o755); err != nil {
 			t.Fatalf("same-size mutation: %v", err)
 		}
@@ -117,6 +117,20 @@ func TestCompareInstalledPackageRejectsSameSizeMutationAfterRead(t *testing.T) {
 	})
 	if !errors.Is(err, ErrInstalledPackageChanged) {
 		t.Fatalf("same-size concurrent mutation error = %v, want ErrInstalledPackageChanged", err)
+	}
+}
+
+func TestCompareInstalledPackageRejectsInstallerModeMismatch(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "plugin.bin")
+	want := []byte("plugin")
+	if err := os.WriteFile(path, want, 0o644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	err := compareInstalledPackage(root, map[string][]byte{"plugin.bin": want}, map[string]os.FileMode{"plugin.bin": 0o755})
+	if !errors.Is(err, ErrInstalledPackageMismatch) {
+		t.Fatalf("mode mismatch error = %v, want ErrInstalledPackageMismatch", err)
 	}
 }
 

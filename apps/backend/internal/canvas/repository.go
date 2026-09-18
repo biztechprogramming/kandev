@@ -258,6 +258,9 @@ func (r *Repository) ensureInstallReceiptColumns() error {
 			return fmt.Errorf("add canvas install receipt publisher provenance: %w", err)
 		}
 	}
+	if _, err := r.db.Exec(`CREATE INDEX IF NOT EXISTS idx_canvas_install_receipts_release ON canvas_install_receipts(release_id)`); err != nil {
+		return fmt.Errorf("index canvas install receipt release_id: %w", err)
+	}
 	return nil
 }
 
@@ -269,6 +272,7 @@ func decodeReceiptProvenance(raw sql.NullString) *provenance.InstallationProvena
 	if json.Unmarshal([]byte(raw.String), &value) != nil || value.Validate() != nil {
 		return nil
 	}
+	value.SanitizePublicURLs()
 	return &value
 }
 

@@ -479,7 +479,7 @@ func (s *Service) download(ctx context.Context, url string) (*IndexDocument, err
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
-	resp, err := s.client.Do(req)
+	resp, err := s.clientForSource(url).Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -502,6 +502,24 @@ func (s *Service) download(ctx context.Context, url string) (*IndexDocument, err
 		return nil, err
 	}
 	return &doc, nil
+}
+
+// clientForSource applies the redirect policy at the trust boundary. The
+// canonical source is fetched without redirects so its HTTPS origin cannot be
+// silently replaced by an untrusted host. Operator-managed sources retain the
+// normal HTTP client redirect behavior because their entries are unverified.
+func (s *Service) clientForSource(sourceURL string) *http.Client {
+	s.mu.Lock()
+	client := s.client
+	canonicalURL := s.canonicalOfficialURL
+	s.mu.Unlock()
+	clone := *client
+	if sourceURL == canonicalURL {
+		clone.CheckRedirect = rejectRedirect
+	} else {
+		clone.CheckRedirect = nil
+	}
+	return &clone
 }
 
 func validateIndexDocument(doc *IndexDocument) error {

@@ -245,13 +245,16 @@ func newBlockedAutoUpdateService(t *testing.T) (*Service, *fakeRuntime, *setting
 	started := make(chan struct{})
 	release := make(chan struct{})
 	var startedOnce sync.Once
+	var releaseOnce sync.Once
+	releaseDownload := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(releaseDownload)
 	packageBytes := testPackage(t, "kandev-plugin-slack", "1.1.0", false).Bytes()
 	svc, rt, ss := newAutoUpdateServiceWithPackageHandler(t, func(w http.ResponseWriter, _ *http.Request) {
 		startedOnce.Do(func() { close(started) })
 		<-release
 		_, _ = w.Write(packageBytes)
 	})
-	return svc, rt, ss, started, func() { close(release) }
+	return svc, rt, ss, started, releaseDownload
 }
 
 func TestRunAutoUpdatePassUpgradesActiveOptedInPlugin(t *testing.T) {

@@ -10,7 +10,6 @@ import {
 import { useTranslation } from "react-i18next";
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
-import { Switch } from "@kandev/ui/switch";
 import Link from "@/components/routing/app-link";
 import { PluginRepoLink } from "./plugin-repo-link";
 import { PluginStatusBadge } from "./plugin-status-badge";
@@ -20,38 +19,14 @@ import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
 import type { MarketplaceEntry, PluginRecord } from "@/lib/types/plugins";
 import { SETTINGS_TYPOGRAPHY } from "@/components/settings/settings-typography";
 import { controlSizingClassName } from "@kandev/ui/control-sizing";
+import { PluginPublisherIdentity } from "./plugin-publisher-identity";
 import {
-  PluginPublisherIdentity,
-  PublisherBadge,
-  publisherIdentitiesMatch,
-} from "./plugin-publisher-identity";
-
-/**
- * The row's view of its marketplace-update status, computed by
- * plugins-settings.tsx from usePluginUpdates + usePluginUpdateAction.
- * `checked` mirrors the hook's global flag (true once the first successful
- * catalog check has completed) so the row can distinguish "haven't checked
- * yet" from "checked and this plugin isn't in any catalog" — never flashing
- * a misleading "not in marketplace" before the first response arrives.
- */
-export type PluginRowUpdateState = {
-  /** This plugin's catalog entry, present once checked and found in any enabled source. */
-  latest?: MarketplaceEntry;
-  /** True when `latest` is strictly newer than the installed version. */
-  hasUpdate: boolean;
-  /** True once a successful catalog check has completed at least once. */
-  checked: boolean;
-  /**
-   * True when the last check reached some sources but not all of them. A
-   * plugin absent from a partial catalog is unknown, not delisted, so the
-   * not-in-marketplace hint is withheld.
-   */
-  sourcesDegraded?: boolean;
-  /** True while a manual update for this plugin is in flight. */
-  busy: boolean;
-  /** Set when the last manual update attempt for this plugin failed. */
-  error?: string;
-};
+  PluginAutoUpdateRow,
+  PluginUpdateInfo,
+  PublisherUpdateNotice,
+} from "./plugin-row-metadata";
+import type { PluginRowUpdateState } from "./plugin-row-types";
+export type { PluginRowUpdateState } from "./plugin-row-types";
 
 type PluginRowProps = {
   plugin: PluginRecord;
@@ -290,60 +265,6 @@ function PluginRowContent({
   );
 }
 
-function PublisherUpdateNotice({
-  current,
-  candidate,
-}: {
-  current?: PluginRecord["publisher_identity"];
-  candidate?: MarketplaceEntry["publisher_identity"];
-}) {
-  const { t } = useTranslation();
-  const currentIdentity = current ?? { status: "unverified" as const };
-  const candidateIdentity = candidate ?? { status: "unverified" as const };
-  const changed = !publisherIdentitiesMatch(currentIdentity, candidateIdentity);
-  return (
-    <div
-      className="space-y-1 rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs"
-      data-testid="plugin-publisher-update-notice"
-    >
-      <PublisherVersionLine
-        label={t("plugins:installedPublisherLabel")}
-        identity={currentIdentity}
-      />
-      <PublisherVersionLine
-        label={t("plugins:candidatePublisherLabel")}
-        identity={candidateIdentity}
-      />
-      {changed && (
-        <p className="font-medium text-amber-700 dark:text-amber-400">
-          {t("plugins:publisherUpdateChanged")}
-        </p>
-      )}
-    </div>
-  );
-}
-
-function PublisherVersionLine({
-  label,
-  identity,
-}: {
-  label: string;
-  identity: NonNullable<PluginRecord["publisher_identity"]>;
-}) {
-  const { t } = useTranslation();
-  const publisher =
-    identity.status === "verified" && identity.login
-      ? identity.login
-      : t("plugins:unverifiedPublisher");
-  return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-      <span>{label}:</span>
-      <span className="font-medium text-foreground">{publisher}</span>
-      <PublisherBadge identity={identity} />
-    </div>
-  );
-}
-
 function usePluginUninstallConfirmation(
   plugin: PluginRecord,
   onConfirmUninstall?: (plugin: PluginRecord) => void | Promise<void>,
@@ -440,89 +361,6 @@ function PluginRowIdentity({
  * some sources, since a plugin carried solely by the source that failed is
  * unknown, not delisted.
  */
-function PluginUpdateInfo({
-  pluginId,
-  update,
-}: {
-  pluginId: string;
-  update?: PluginRowUpdateState;
-}) {
-  const { t } = useTranslation();
-  if (!update?.checked) return null;
-
-  if (!update.latest) {
-    if (update.sourcesDegraded) return null;
-    return (
-      <span data-testid={`plugin-not-in-marketplace-${pluginId}`}>
-        {t("plugins:notInMarketplace")}
-      </span>
-    );
-  }
-
-  return (
-    <span data-testid={`plugin-latest-version-${pluginId}`}>
-      {t("plugins:latestVersion", { version: update.latest.version })}
-    </span>
-  );
-}
-
-/**
- * The per-plugin auto-update control. The switch reflects the effective state
- * (the plugin's own override, or the instance-wide default when it has none);
- * toggling it sets an explicit override. Once overridden, a "Reset" affordance
- * clears the override so the plugin follows the global default again.
- */
-function PluginAutoUpdateRow({
-  plugin,
-  autoUpdateDefault,
-  busy,
-  onSetAutoUpdate,
-}: {
-  plugin: PluginRecord;
-  autoUpdateDefault: boolean;
-  busy: boolean;
-  onSetAutoUpdate: (plugin: PluginRecord, value: boolean | null) => void;
-}) {
-  const { t } = useTranslation();
-  const isOverridden = plugin.auto_update !== null && plugin.auto_update !== undefined;
-  const effective = isOverridden ? (plugin.auto_update as boolean) : autoUpdateDefault;
-
-  return (
-    <div className="flex items-center justify-between gap-3 border-t border-border/50 pt-3">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <span>{t("plugins:autoUpdate")}</span>
-        {isOverridden && (
-          <Badge variant="outline" className={SETTINGS_TYPOGRAPHY.meta}>
-            {t("plugins:override")}
-          </Badge>
-        )}
-      </div>
-      <div className="relative z-10 flex items-center gap-2">
-        {isOverridden && (
-          <button
-            type="button"
-            data-testid={`plugin-auto-update-reset-${plugin.id}`}
-            aria-label={t("plugins:resetAutoUpdateFor", { name: plugin.display_name })}
-            className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline cursor-pointer disabled:opacity-50"
-            disabled={busy}
-            onClick={() => onSetAutoUpdate(plugin, null)}
-          >
-            {t("plugins:reset")}
-          </button>
-        )}
-        <Switch
-          data-testid={`plugin-auto-update-${plugin.id}`}
-          aria-label={t("plugins:autoUpdateFor", { name: plugin.display_name })}
-          checked={effective}
-          disabled={busy}
-          onCheckedChange={(value) => onSetAutoUpdate(plugin, value)}
-          className="cursor-pointer"
-        />
-      </div>
-    </div>
-  );
-}
-
 type PluginRowActionsProps = Omit<
   PluginRowProps,
   | "onEnable"

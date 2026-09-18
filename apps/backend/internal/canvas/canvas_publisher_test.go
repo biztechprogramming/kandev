@@ -114,12 +114,26 @@ func TestCanvasPublisherReceiptMigrationAndReleaseProjection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("upgrade repository: %v", err)
 	}
+	legacyProvenance := `{"origin":"upload","source_url":"https://user:secret@downloads.example/index.json?sig=private","package_id":"canvas-board","version":"1.0.0"}`
+	if _, err := pool.Writer().Exec(`UPDATE canvas_install_receipts SET publisher_provenance_json = ? WHERE preparation_id = ?`, legacyProvenance, "legacy-prep"); err != nil {
+		t.Fatalf("write legacy provenance: %v", err)
+	}
 	legacy, err := repo.GetInstallReceipt(context.Background(), "legacy-prep", "user-1")
 	if err != nil {
 		t.Fatalf("read legacy receipt: %v", err)
 	}
 	if legacy.PublisherIdentity == nil || legacy.PublisherIdentity.Status != provenance.StatusUnverified {
 		t.Fatalf("legacy identity = %+v, want unverified", legacy.PublisherIdentity)
+	}
+	if legacy.PublisherProvenance == nil || legacy.PublisherProvenance.SourceURL != "https://downloads.example/index.json" {
+		t.Fatalf("legacy receipt source URL = %+v, want sanitized URL", legacy.PublisherProvenance)
+	}
+	var releaseIndex string
+	if err := pool.Reader().Get(&releaseIndex, `SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_canvas_install_receipts_release'`); err != nil {
+		t.Fatalf("release index lookup: %v", err)
+	}
+	if releaseIndex != "idx_canvas_install_receipts_release" {
+		t.Fatalf("release index = %q", releaseIndex)
 	}
 	columns, err := db.TableColumns(pool.Writer(), "canvas_install_receipts")
 	if err != nil {

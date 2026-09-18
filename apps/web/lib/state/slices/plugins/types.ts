@@ -23,6 +23,11 @@ export type PluginsSliceActions = {
     publisherIdentity: PluginRecord["publisher_identity"],
     publisherProvenance: PluginRecord["publisher_provenance"],
   ) => boolean;
+  verifyPluginPublisher: (
+    id: string,
+    expectedInstallationID: string,
+    expectedVersion: string,
+  ) => Promise<boolean>;
   removePlugin: (id: string) => void;
 };
 

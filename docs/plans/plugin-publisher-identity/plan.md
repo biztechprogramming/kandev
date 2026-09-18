@@ -35,7 +35,7 @@ The [trust decision](../../decisions/2026-09-18-plugin-publisher-trust.md) recor
 - Canvas review, receipts, active-release attribution, and export boundaries.
 - Desktop/phone attribution, translations, errors, and public documentation.
 - Compatible unverified behavior for legacy, direct, and custom-source installations.
-- Explicit verification of an existing native version without update, reinstall, or restart.
+- Explicit verification of an existing native version without update or reinstall; a running process is briefly paused and restarted while its files are compared.
 
 ### Out of scope
 
@@ -174,7 +174,7 @@ Coverage is recorded against the acceptance criteria below.
 | 001.4, 003.2, 003.4 | `internal/plugins/marketplace/publisher_test.go`: `TestPublisherTrustBoundary`; fake source ID/name/header, override URL, redirect, custom evidence, and legacy entries |
 | 002.1, 002.2, 002.4, 002.5 | `internal/plugins/publisher_install_test.go`: `TestPublisherCatalogInstall`; manifest/digest mismatch, stale selection, upload, sync, restart, record failure, and mixed request rejection |
 | 002.3, 002.5 | Existing installation and autoupdate suites plus `internal/plugins/publisher_install_test.go`: publisher continuity, digest rejection, stale selection, and lifecycle protection |
-| 004.1 through 004.4 | `internal/plugins/publisher_existing_test.go`: `TestPublisherExistingVersionVerification`; unchanged final release, exact inventory, unavailable version, forged evidence, symlinks, mutation races, source retention, no lifecycle side effects, and restart persistence |
+| 004.1 through 004.4 | `internal/plugins/publisher_existing_test.go`: `TestPublisherExistingVersionVerification`; unchanged final release, exact inventory, unavailable version, forged evidence, symlinks, mutation races, source retention, runtime pause/restart, and restart persistence |
 | 002.2, 002.6, 003.4 | `internal/canvas/canvas_publisher_test.go`: receipt carry-through/replay, forged upload fields, receipt migration, release projection, and rollback |
 | 001.4, 002.1 | `internal/backendapp/canvas_publisher_test.go`: `TestCanvasInstallRequestDoesNotAcceptBrowserPublisherEvidence` plus canvas route coverage |
 | 003.1 through 003.5 | Shared component tests plus existing row, update-hook, API-client, and canvas-review suites |

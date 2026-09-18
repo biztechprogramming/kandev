@@ -1,9 +1,20 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { createPluginsSlice } from "./plugins-slice";
 import type { PluginsSlice } from "./types";
 import type { PluginRecord } from "@/lib/types/plugins";
+import { verifyPluginPublisher } from "@/lib/api/domains/plugins-api";
+
+vi.mock("@/lib/api/domains/plugins-api", () => ({
+  verifyPluginPublisher: vi.fn(),
+}));
+
+const verifyPluginPublisherMock = vi.mocked(verifyPluginPublisher);
+
+afterEach(() => {
+  vi.clearAllMocks();
+});
 
 function makeStore() {
   return create<PluginsSlice>()(
@@ -33,6 +44,8 @@ function plugin(id: string, overrides: Partial<PluginRecord> = {}): PluginRecord
 
 const INSTALLED_VERSION = "1.0.0";
 const INSTALLED_ID = "installation-a";
+const REPLACEMENT_VERSION = "2.0.0";
+const REPLACEMENT_ID = "installation-b";
 
 describe("plugins slice", () => {
   it("starts empty, not loading, not loaded, no error", () => {
@@ -141,11 +154,13 @@ describe("plugins slice publisher updates", () => {
     ).toBe(false);
     expect(store.getState().plugins.items).toHaveLength(0);
 
-    store
-      .getState()
-      .setPlugins([
-        plugin("a", { version: "2.0.0", installation_id: "installation-b", status: "active" }),
-      ]);
+    store.getState().setPlugins([
+      plugin("a", {
+        version: REPLACEMENT_VERSION,
+        installation_id: REPLACEMENT_ID,
+        status: "active",
+      }),
+    ]);
     expect(
       store
         .getState()
@@ -158,8 +173,65 @@ describe("plugins slice publisher updates", () => {
         ),
     ).toBe(false);
     expect(store.getState().plugins.items[0]).toMatchObject({
-      version: "2.0.0",
-      installation_id: "installation-b",
+      version: REPLACEMENT_VERSION,
+      installation_id: REPLACEMENT_ID,
+      status: "active",
+    });
+  });
+});
+
+describe("plugins slice async publisher verification", () => {
+  it("verifies through the slice and never reinserts a removed plugin", async () => {
+    const store = makeStore();
+    let resolveResponse!: (record: PluginRecord) => void;
+    const pending = new Promise<PluginRecord>((resolve) => {
+      resolveResponse = resolve;
+    });
+    verifyPluginPublisherMock.mockReturnValueOnce(pending);
+    store
+      .getState()
+      .setPlugins([plugin("a", { version: INSTALLED_VERSION, installation_id: INSTALLED_ID })]);
+    const resultPromise = store
+      .getState()
+      .verifyPluginPublisher("a", INSTALLED_ID, INSTALLED_VERSION);
+    store.getState().removePlugin("a");
+    resolveResponse(
+      plugin("a", {
+        version: INSTALLED_VERSION,
+        installation_id: INSTALLED_ID,
+        publisher_identity: { status: "verified", login: "acme" },
+      }),
+    );
+    await expect(resultPromise).resolves.toBe(false);
+    expect(store.getState().plugins.items).toHaveLength(0);
+  });
+
+  it("ignores a verification response after a replacement", async () => {
+    const store = makeStore();
+    store
+      .getState()
+      .setPlugins([plugin("a", { version: INSTALLED_VERSION, installation_id: INSTALLED_ID })]);
+    verifyPluginPublisherMock.mockResolvedValueOnce(
+      plugin("a", {
+        version: INSTALLED_VERSION,
+        installation_id: INSTALLED_ID,
+        publisher_identity: { status: "verified", login: "acme" },
+      }),
+    );
+    const resultPromise = store
+      .getState()
+      .verifyPluginPublisher("a", INSTALLED_ID, INSTALLED_VERSION);
+    store.getState().setPlugins([
+      plugin("a", {
+        version: REPLACEMENT_VERSION,
+        installation_id: REPLACEMENT_ID,
+        status: "active",
+      }),
+    ]);
+    await expect(resultPromise).resolves.toBe(false);
+    expect(store.getState().plugins.items[0]).toMatchObject({
+      version: REPLACEMENT_VERSION,
+      installation_id: REPLACEMENT_ID,
       status: "active",
     });
   });

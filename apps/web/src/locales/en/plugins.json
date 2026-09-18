@@ -206,6 +206,5 @@
   "retryVerification": "Retry verification",
   "installedPublisherLabel": "Installed",
   "candidatePublisherLabel": "Candidate",
-  "publisherUpdateChanged": "This update changes the publisher.",
-  "workspace": "Workspace"
+  "publisherUpdateChanged": "This update changes the publisher."
 }

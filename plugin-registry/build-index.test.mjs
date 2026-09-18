@@ -422,6 +422,58 @@ test("buildEntry keeps stars null (never 0) when repo metadata lookup fails", as
   assert.equal(record.icon_url, null); // no manifest icon
 });
 
+test("buildIndex retains a previous star count when refresh metadata is unavailable", async () => {
+  stubGitHub({
+    release: {
+      tag_name: "1.0.0",
+      assets: [{ name: "foo-1.0.0.tar.gz", browser_download_url: "https://dl/foo.tar.gz" }],
+    },
+    manifestText: "display_name: Foo",
+    repoMeta: {
+      id: 123,
+      full_name: "acme/foo",
+      owner: { id: 456, login: "acme" },
+    },
+  });
+  const { document } = await buildIndex(
+    [{ id: "foo", repo: "acme/foo" }],
+    { plugins: [{ id: "foo", stars: 42 }] },
+  );
+  assert.equal(document.plugins[0].stars, 42);
+});
+
+test("buildEntry rejects a canvas when its trusted inspector is unavailable", async () => {
+  const previousInspector = process.env.KANDEV_CANVAS_PACKAGE_INSPECTOR;
+  delete process.env.KANDEV_CANVAS_PACKAGE_INSPECTOR;
+  stubGitHub({
+    release: {
+      tag_name: "1.0.0",
+      assets: [{ name: "board-1.0.0.tar.gz", browser_download_url: "https://dl/board.tar.gz" }],
+    },
+    manifestText: "display_name: Board",
+    repoMeta: {
+      id: 123,
+      full_name: "acme/board",
+      stargazers_count: 1,
+      owner: { id: 456, login: "acme" },
+    },
+  });
+  try {
+    const result = await buildEntry({
+      id: "board",
+      repo: "acme/board",
+      kind: "canvas",
+      previews: [{ url: "https://cdn.example/cover.webp", alt: "Board" }],
+    });
+    assert.equal(result.record, undefined);
+    assert.match(result.error, /KANDEV_CANVAS_PACKAGE_INSPECTOR is not configured/);
+  } finally {
+    if (previousInspector === undefined)
+      delete process.env.KANDEV_CANVAS_PACKAGE_INSPECTOR;
+    else process.env.KANDEV_CANVAS_PACKAGE_INSPECTOR = previousInspector;
+  }
+});
+
 test("buildEntry uses inspected canvas presentation metadata and preserves preview order", async () => {
   const directory = await fs.mkdtemp(
     path.join(os.tmpdir(), "kandev-registry-test-"),

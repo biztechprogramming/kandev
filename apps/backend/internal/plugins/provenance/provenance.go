@@ -113,28 +113,66 @@ func (e Evidence) Validate() error {
 	if e.SchemaVersion != 1 {
 		return fmt.Errorf("unsupported publisher evidence schema version %d", e.SchemaVersion)
 	}
-	if !decimalID.MatchString(strings.TrimSpace(e.RepositoryID)) {
-		return errors.New("publisher evidence repository id is invalid")
+	if err := validateEvidenceID("repository id", e.RepositoryID); err != nil {
+		return err
 	}
-	if !decimalID.MatchString(strings.TrimSpace(e.OwnerID)) {
-		return errors.New("publisher evidence owner id is invalid")
+	if err := validateEvidenceID("owner id", e.OwnerID); err != nil {
+		return err
 	}
-	e.Login = strings.TrimSpace(e.Login)
-	e.Repository = strings.TrimSpace(e.Repository)
+	if err := validateEvidenceWhitespace(e); err != nil {
+		return err
+	}
 	if e.Login == "" {
 		return errors.New("publisher evidence login is missing")
 	}
-	parts := strings.Split(e.Repository, "/")
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" || strings.ContainsAny(e.Repository, "?#") {
+	if err := validateEvidenceRepository(e.Repository, e.Login); err != nil {
+		return err
+	}
+	if err := validateEvidenceDigest(e.PackageSHA256); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateEvidenceID(name, value string) error {
+	if hasSurroundingWhitespace(value) || !decimalID.MatchString(value) {
+		return fmt.Errorf("publisher evidence %s is invalid", name)
+	}
+	return nil
+}
+
+func validateEvidenceWhitespace(e Evidence) error {
+	for _, value := range []string{e.Login, e.Repository, e.PackageSHA256} {
+		if hasSurroundingWhitespace(value) {
+			return errors.New("publisher evidence contains surrounding whitespace")
+		}
+	}
+	return nil
+}
+
+func validateEvidenceRepository(repository, login string) error {
+	parts := strings.Split(repository, "/")
+	if len(parts) != 2 {
 		return errors.New("publisher evidence repository is invalid")
 	}
-	if !strings.EqualFold(parts[0], e.Login) {
+	if parts[0] == "" || parts[1] == "" || strings.ContainsAny(repository, "?#") {
+		return errors.New("publisher evidence repository is invalid")
+	}
+	if !strings.EqualFold(parts[0], login) {
 		return errors.New("publisher evidence repository owner does not match login")
 	}
-	if e.PackageSHA256 != "" && !sha256Hex.MatchString(strings.ToLower(strings.TrimSpace(e.PackageSHA256))) {
+	return nil
+}
+
+func validateEvidenceDigest(digest string) error {
+	if digest != "" && !sha256Hex.MatchString(strings.ToLower(digest)) {
 		return errors.New("publisher evidence package digest is invalid")
 	}
 	return nil
+}
+
+func hasSurroundingWhitespace(value string) bool {
+	return value != strings.TrimSpace(value)
 }
 
 // Validate checks a complete installed provenance tuple. It is intentionally

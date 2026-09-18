@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import { verifyPluginPublisher as verifyPluginPublisherRequest } from "@/lib/api/domains/plugins-api";
 import type { PluginsSlice, PluginsSliceState } from "./types";
 
 export const defaultPluginsState: PluginsSliceState = {
@@ -8,13 +9,16 @@ export const defaultPluginsState: PluginsSliceState = {
 type ImmerSet = Parameters<
   StateCreator<PluginsSlice, [["zustand/immer", never]], [], PluginsSlice>
 >[0];
+type ImmerGet = Parameters<
+  StateCreator<PluginsSlice, [["zustand/immer", never]], [], PluginsSlice>
+>[1];
 
 export const createPluginsSlice: StateCreator<
   PluginsSlice,
   [["zustand/immer", never]],
   [],
   PluginsSlice
-> = (set: ImmerSet) => ({
+> = (set: ImmerSet, get: ImmerGet) => ({
   ...defaultPluginsState,
   setPlugins: (plugins) =>
     set((draft) => {
@@ -61,6 +65,19 @@ export const createPluginsSlice: StateCreator<
       applied = true;
     });
     return applied;
+  },
+  verifyPluginPublisher: async (id, expectedInstallationID, expectedVersion) => {
+    const updated = await verifyPluginPublisherRequest(id, {
+      expected_installation_id: expectedInstallationID,
+      expected_version: expectedVersion,
+    });
+    return get().updatePluginPublisher(
+      id,
+      expectedInstallationID,
+      expectedVersion,
+      updated.publisher_identity,
+      updated.publisher_provenance,
+    );
   },
   removePlugin: (id) =>
     set((draft) => {
