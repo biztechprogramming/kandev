@@ -648,13 +648,14 @@ test("buildIndex skips bad entries but still builds the good ones", async () => 
     });
   };
 
-  const { document, errors } = await buildIndex([
+  const { document, errors, nativeErrors } = await buildIndex([
     { id: "a", repo: "o/a" },
     { id: "b", repo: "o/b" },
   ]);
   assert.equal(document.plugins.length, 1);
   assert.equal(document.plugins[0].id, "a");
   assert.equal(errors.length, 1);
+  assert.equal(nativeErrors.length, 0);
   assert.equal(
     (
       await buildIndex([
@@ -723,7 +724,8 @@ test("pull-request validation fails a mixed native result with one invalid entry
       ["good"],
     );
     assert.equal(result.errors.length, 1);
-    assert.equal(pullRequestValidationFailed(result.errors), true);
+    assert.equal(result.nativeErrors.length, 1);
+    assert.equal(pullRequestValidationFailed(result.nativeErrors, result.canvasErrors), true);
     assert.equal(result.exitCode, 1);
     assert.equal(process.exitCode, 1);
   } finally {

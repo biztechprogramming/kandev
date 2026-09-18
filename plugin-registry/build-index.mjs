@@ -15,10 +15,10 @@
 //
 // Robustness: one bad entry (missing release, deleted asset, API hiccup) never
 // fails a scheduled build — its error is logged to stderr and it is skipped. A
-// pull request fails when it introduces any invalid entry, so registry
-// validation cannot silently omit a reviewed listing. A repo whose star lookup
-// fails retains its previous count when one is available and otherwise uses
-// `stars: null`, never inventing `0` for a transient outage.
+// pull request fails when native package or canvas validation rejects an entry,
+// while ordinary release availability gaps remain skippable. A repo whose star
+// lookup fails retains its previous count when one is available and otherwise
+// uses `stars: null`, never inventing `0` for a transient outage.
 //
 // Auth: GitHub API calls use GITHUB_TOKEN when present (in CI, secrets.GITHUB_TOKEN).
 // That works for the public repos here; at larger scale a PAT with `public_repo`
@@ -351,18 +351,25 @@ function isReservedAuthor(value) {
 
 /**
  * Resolve a single plugins.yaml spec into a full index.json record.
- * @returns {Promise<{record?: object, error?: string}>}
+ * @returns {Promise<{record?: object, error?: string, validationError?: boolean}>}
  */
 export async function buildEntry(spec) {
   const pluginId = spec.id;
   const repo = spec.repo;
   if (!pluginId || !repo)
-    return { error: `entry missing id/repo: ${JSON.stringify(spec)}` };
+    return {
+      error: `entry missing id/repo: ${JSON.stringify(spec)}`,
+      validationError: true,
+    };
   const kind = spec.kind || "plugin";
   const previewError = validatePreviews(spec.previews, kind === "canvas");
-  if (previewError) return { error: `${pluginId}: ${previewError}` };
+  if (previewError)
+    return { error: `${pluginId}: ${previewError}`, validationError: true };
   if (kind !== "plugin" && kind !== "canvas")
-    return { error: `${pluginId}: unsupported kind ${kind}` };
+    return {
+      error: `${pluginId}: unsupported kind ${kind}`,
+      validationError: true,
+    };
 
   let release;
   try {
@@ -382,10 +389,17 @@ export async function buildEntry(spec) {
   if (assetError) return { error: `${pluginId}: ${assetError}` };
 
   const meta = await fetchRepoMeta(repo, pluginId);
-  if (meta.error) return { error: `${pluginId}: ${meta.error}` };
+  if (meta.error)
+    return {
+      error: `${pluginId}: ${meta.error}`,
+      validationError: meta.validationError,
+    };
   const official = spec.official === true;
   if (official && meta.login.toLowerCase() !== "kdlbs") {
-    return { error: `${pluginId}: official entries must be owned by kdlbs` };
+    return {
+      error: `${pluginId}: official entries must be owned by kdlbs`,
+      validationError: true,
+    };
   }
 
   const canonicalRepoURL = `https://github.com/${repo}`;
@@ -403,14 +417,21 @@ export async function buildEntry(spec) {
       inspectorName,
       maxPackageBytes,
     );
-    if (inspected.error) return { error: `${pluginId}: ${inspected.error}` };
+    if (inspected.error)
+      return {
+        error: `${pluginId}: ${inspected.error}`,
+        validationError: true,
+      };
   } else {
     // A missing inspector cannot create publisher evidence. Keep ordinary
     // catalog discovery available for development and legacy tests, but fail
     // an explicitly official entry rather than publishing an unverified
     // first-party listing from an incomplete build environment.
     if (official || kind === "canvas")
-      return { error: `${pluginId}: ${inspectorName} is not configured` };
+      return {
+        error: `${pluginId}: ${inspectorName} is not configured`,
+        validationError: true,
+      };
     const manifest = tag ? await fetchManifest(repo, tag) : {};
     inspected = {
       descriptor: {
@@ -431,6 +452,7 @@ export async function buildEntry(spec) {
   ) {
     return {
       error: `${pluginId}: inspected package identity does not match the registry entry`,
+      validationError: true,
     };
   }
 
@@ -441,12 +463,14 @@ export async function buildEntry(spec) {
     ) {
       return {
         error: `${pluginId}: inspected package repository does not match the registry entry`,
+        validationError: true,
       };
     }
   }
   if (!official && isReservedAuthor(inspectedDescriptor.author)) {
     return {
       error: `${pluginId}: reserved Kandev author claims must come from an official kdlbs entry`,
+      validationError: true,
     };
   }
   const publisher = inspected.digest
@@ -601,7 +625,10 @@ async function fetchRepoMeta(repo, pluginId) {
       typeof owner.login !== "string" ||
       typeof repository !== "string"
     ) {
-      return { error: "repository ownership metadata is incomplete" };
+      return {
+        error: "repository ownership metadata is incomplete",
+        validationError: true,
+      };
     }
     if (
       repository.toLowerCase() !== repo.toLowerCase() ||
@@ -610,6 +637,7 @@ async function fetchRepoMeta(repo, pluginId) {
       return {
         error:
           "repository ownership metadata does not match the registry pointer",
+        validationError: true,
       };
     }
     return {
@@ -635,6 +663,7 @@ async function fetchRepoMeta(repo, pluginId) {
 export async function buildIndex(specs, previousDocument) {
   const records = [];
   const errors = [];
+  const nativeErrors = [];
   const canvasErrors = [];
   const previousStars = new Map(
     (previousDocument?.plugins ?? [])
@@ -642,9 +671,10 @@ export async function buildIndex(specs, previousDocument) {
       .map((entry) => [entry.id, entry.stars]),
   );
   for (const spec of specs) {
-    const { record, error } = await buildEntry(spec);
+    const { record, error, validationError } = await buildEntry(spec);
     if (error) {
       errors.push(error);
+      if (validationError) nativeErrors.push(error);
       if ((spec.kind || "plugin") === "canvas") canvasErrors.push(error);
       console.error(`skip: ${error}`);
       continue;
@@ -660,15 +690,15 @@ export async function buildIndex(specs, previousDocument) {
     source: { name: SOURCE_NAME, url: SOURCE_URL },
     plugins: records,
   };
-  return { document, errors, canvasErrors };
+  return { document, errors, nativeErrors, canvasErrors };
 }
 
-// Pull-request validation must fail for every invalid listed entry, including
-// native plugins. Scheduled publication intentionally keeps its existing
-// behavior of logging and skipping invalid entries so one bad release does not
-// prevent healthy entries from being published.
-export function pullRequestValidationFailed(errors) {
-  return errors.length > 0;
+// Pull-request validation must fail for rejected package identity/provenance
+// checks and canvas entries. Scheduled publication intentionally keeps its
+// existing behavior of logging and skipping invalid entries so one bad release
+// does not prevent healthy entries from being published.
+export function pullRequestValidationFailed(nativeErrors, canvasErrors = []) {
+  return nativeErrors.length > 0 || canvasErrors.length > 0;
 }
 
 export async function main(options = {}) {
@@ -681,7 +711,10 @@ export async function main(options = {}) {
   // resolves to zero entries (below) indicates a real failure.
   const previousDocument =
     options.previousDocument ?? (options.specs ? undefined : await loadPreviousDocument());
-  const { document, errors } = await buildIndex(specs, previousDocument);
+  const { document, errors, nativeErrors, canvasErrors } = await buildIndex(
+    specs,
+    previousDocument,
+  );
   await fs.writeFile(
     outputPath,
     `${JSON.stringify(document, null, 2)}\n`,
@@ -701,12 +734,15 @@ export async function main(options = {}) {
     );
     exitCode = 1;
   }
-  if (eventName === "pull_request" && pullRequestValidationFailed(errors)) {
+  if (
+    eventName === "pull_request" &&
+    pullRequestValidationFailed(nativeErrors, canvasErrors)
+  ) {
     console.error("error: pull-request validation found invalid entries");
     exitCode = 1;
   }
   if (exitCode !== 0) process.exitCode = exitCode;
-  return { document, errors, exitCode };
+  return { document, errors, nativeErrors, canvasErrors, exitCode };
 }
 
 async function loadPreviousDocument() {
