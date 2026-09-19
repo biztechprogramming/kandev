@@ -1,0 +1,29 @@
+{
+  "generated_at": "2026-09-19T15:24:26.277090Z",
+  "assets": [
+    {
+      "name": "desktop-editor",
+      "type": "screenshot",
+      "format": "png",
+      "file": "sidebar-customization-pr-capture--desktop-editor.png",
+      "test": "sidebar-customization-pr-capture.spec.ts",
+      "caption": "Desktop sidebar layout editor with grouped shortcuts and visibility controls."
+    },
+    {
+      "name": "desktop-sidebar",
+      "type": "screenshot",
+      "format": "png",
+      "file": "sidebar-customization-pr-capture--desktop-sidebar.png",
+      "test": "sidebar-customization-pr-capture.spec.ts",
+      "caption": "Desktop sidebar with the saved shortcut group expanded."
+    },
+    {
+      "name": "mobile-focused-editor",
+      "type": "screenshot",
+      "format": "png",
+      "file": "mobile-sidebar-customization-pr-capture--mobile-focused-editor.png",
+      "test": "mobile-sidebar-customization-pr-capture.spec.ts",
+      "caption": "Phone focused editor with touch-sized shortcut reorder controls."
+    }
+  ]
+}
