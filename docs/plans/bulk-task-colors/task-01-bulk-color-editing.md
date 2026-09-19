@@ -16,7 +16,7 @@ acceptance_criteria:
   - AC-UI-SIDEBAR-AUTOMATIC-TASK-COLORS-006.6
   - AC-UI-SIDEBAR-AUTOMATIC-TASK-COLORS-006.7
 system_design:
-  - ../../specs/ui/system-design/sidebar-automatic-task-colors.md
+  - ../../specs/ui/system-design/bulk-task-colors.md
 ---
 
 # Task 01: Bulk color editing
@@ -29,7 +29,8 @@ patch API. Extend the existing single-task color path and both selection surface
 ## In scope
 
 - Batch mutation, optimistic reconciliation, bounded chunks, pending/error state.
-- Shared palette for sidebar bulk menu and board toolbar, with mobile picker.
+- Shared palette for sidebar bulk menu and board toolbar, with mobile picker
+  and an explicit phone Select tasks / Cancel selection entry point.
 - Localization, focused regression tests, and public task-guide instructions.
 
 ## Out of scope
@@ -69,6 +70,10 @@ Sidebar: 3 selected        Board: 3 selected
 UI-02: Phone board selection and expanded color picker.
 
 ```text
+Before selection, above the board:
+[Select tasks]
+In selection mode: [Cancel selection]
+
 Fixed selection bar, above safe area:
 [3 selected] [Color] [Actions] [Clear]
 
@@ -118,7 +123,8 @@ None enablement, preserving selection, pending state, and palette labels.
 
 Add task/bulk-task-colors.spec.ts for sidebar and board entry points, persistence
 across reload, clearing, unselected controls, and automatic-rule precedence.
-Add kanban/mobile-bulk-task-colors.spec.ts using visible selection controls,
+Add kanban/mobile-bulk-task-colors.spec.ts starting with zero selection. Tap the
+new Select tasks control, select cards without modifiers, cancel and re-enter,
 then choose and clear a color, verify stored values and sidebar markers on reload,
 44px targets, focus return, contained drawer, and no horizontal overflow.
 Exercise phone Actions to preserve existing bulk actions; verify just below and
@@ -134,7 +140,7 @@ New test paths below are outputs of this work order.
 (cd apps && pnpm install --frozen-lockfile)
 (cd apps/web && pnpm exec vitest run hooks/use-task-color.test.tsx hooks/use-task-color-migration.test.tsx components/task/task-switcher-context-menu.test.tsx components/task/task-switcher-color-menu.test.tsx components/kanban/task-multi-select-toolbar.test.tsx)
 (cd apps/web && pnpm run typecheck)
-(cd apps/web && pnpm exec eslint hooks/use-task-color.ts components/task/task-switcher-color-menu.tsx components/task/task-switcher-context-menu-items.tsx components/kanban/task-multi-select-toolbar.tsx)
+(cd apps/web && pnpm exec eslint hooks/use-task-color.ts components/task/task-switcher-color-menu.tsx components/task/task-switcher-context-menu-items.tsx components/kanban/task-multi-select-toolbar.tsx components/kanban-board.tsx)
 (cd apps/web && pnpm run i18n:check)
 (cd apps/web && pnpm e2e:run --project chromium -- tests/task/bulk-task-colors.spec.ts tests/task/sidebar-multi-select.spec.ts tests/task/sidebar-task-color-sync.spec.ts tests/kanban/task-multi-select.spec.ts)
 (cd apps/web && pnpm e2e:run --project mobile-chrome -- tests/kanban/mobile-bulk-task-colors.spec.ts tests/task/mobile-sidebar-task-color-sync.spec.ts)
@@ -153,6 +159,7 @@ by extraction. Run E2E projects sequentially; do not override worker budgets.
 - apps/web/hooks/use-task-color.ts and use-task-color.test.tsx
 - apps/web/components/task/task-switcher-color-menu.tsx and new companion test
 - apps/web/components/task/task-switcher-context-menu-items.tsx and existing task-switcher-context-menu.test.tsx
+- apps/web/components/kanban-board.tsx (phone selection entry point)
 - apps/web/components/kanban/task-multi-select-toolbar.tsx and new companion test
 - apps/web/components/task/mobile/mobile-picker-sheet.tsx (reuse; modify only if required)
 - apps/web/src/locales/{en,pt-pt,zh-cn,zh-hk,zh-tw}/ task and kanban catalogs as needed

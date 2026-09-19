@@ -13,8 +13,8 @@ implementation requires a later explicit request. No production code changed.
 
 ## Sources
 
-- [Requirements](../../specs/ui/requirements/sidebar-automatic-task-colors.md): REQ-UI-SIDEBAR-AUTOMATIC-TASK-COLORS-006, draft extension.
-- [System design](../../specs/ui/system-design/sidebar-automatic-task-colors.md#bulk-manual-color-editing): draft bulk extension to the current personal-color design.
+- [Requirements](../../specs/ui/requirements/bulk-task-colors.md): REQ-UI-SIDEBAR-AUTOMATIC-TASK-COLORS-006, draft extension.
+- [System design](../../specs/ui/system-design/bulk-task-colors.md#bulk-manual-color-editing): draft bulk design extending the current personal-color contract.
 - [ADR 0041](../../decisions/0041-backend-owned-portable-user-settings.md): reuse portable personal settings ownership; no new ADR needed.
 
 ## Work package
@@ -49,6 +49,10 @@ Sidebar: 3 selected        Board: 3 selected
 UI-02: Phone board selection and expanded color picker.
 
 ```text
+Before selection, above the board:
+[Select tasks]
+In selection mode: [Cancel selection]
+
 Fixed selection bar, above safe area:
 [3 selected] [Color] [Actions] [Clear]
 
@@ -109,5 +113,8 @@ chosen from docs/public after searching current task navigation documentation.
 
 ## Results
 
-Design checks are recorded in the task plan and final handoff. Implementation
-and rendered verification are pending.
+Review remediation: add an explicit phone selection trigger and move the new
+contract into draft artifacts, preserving the shipped personal-color specs.
+Document catalog validation, all 36 specification-linter tests, full specification
+lint, and diff whitespace validation passed after these corrections.
+Implementation and rendered verification remain pending.
