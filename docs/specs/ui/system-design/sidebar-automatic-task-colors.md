@@ -7,6 +7,7 @@ requirements:
   - REQ-UI-SIDEBAR-AUTOMATIC-TASK-COLORS-003
   - REQ-UI-SIDEBAR-AUTOMATIC-TASK-COLORS-004
   - REQ-UI-SIDEBAR-AUTOMATIC-TASK-COLORS-005
+  - REQ-UI-SIDEBAR-AUTOMATIC-TASK-COLORS-006
 ---
 
 # Sidebar Task Colors System Design
@@ -26,6 +27,7 @@ The backend owns the portable settings value. Existing task, workflow, executor,
 | `REQ-UI-SIDEBAR-AUTOMATIC-TASK-COLORS-003` | [Repository identity and discovery](#repository-identity-and-discovery) |
 | `REQ-UI-SIDEBAR-AUTOMATIC-TASK-COLORS-004` | [Settings persistence](#settings-persistence), [Responsive behavior](#responsive-behavior), [Failure behavior](#failure-behavior) |
 | `REQ-UI-SIDEBAR-AUTOMATIC-TASK-COLORS-005` | [Manual color model and mutation](#manual-color-model-and-mutation), [Legacy browser migration](#legacy-browser-migration), [Failure behavior](#failure-behavior) |
+| `REQ-UI-SIDEBAR-AUTOMATIC-TASK-COLORS-006` | [Bulk manual color editing](#bulk-manual-color-editing) |
 
 ## Existing contracts
 
@@ -259,6 +261,79 @@ The backend stores the map in the existing `users.settings` JSON value. This cha
 The mutation response goes through the common settings mapper. Revision guards prevent an older response from replacing a newer settings event.
 
 The existing `user.settings.updated` event can refresh another open browser. The product contract only guarantees the new value after reload.
+
+## Bulk manual color editing
+
+This is a draft extension to the current design. Delivery is tracked in the
+[bulk color plan](../../../plans/bulk-task-colors/plan.md). UI remains the owner
+because colors are personal presentation preferences, not shared task metadata.
+
+### Selection and surfaces
+
+`BulkSelectionMenuItems` in `task-switcher-context-menu-items.tsx` adds Color
+beside Pin in its mark group, using the existing `actingIds` targeting rule.
+The mark group must remain visible when pin callbacks are absent. Single-task
+menus retain their existing targeting and automatic-source explanation.
+`TaskMultiSelectToolbar` adds Color for its `selectedIds`; mixed workflows do
+not disable it. No new task color markers are introduced on board cards.
+
+Generalize the palette in `task-switcher-color-menu.tsx` to accept a task-ID
+set and share its selection/value derivation with a toolbar picker. Deduplicate
+IDs and capture an immutable set at option activation. Do not derive targets
+from the active task or reuse workflow-move eligibility. A personal color does
+not require a workflow or mutate task lifecycle. Existing selection cleanup
+removes stale rows; an empty target set is a no-op. No descendant expansion.
+Read manual values from `sidebarTaskColors`, treating absent and null as None.
+Check a color only for a unanimous non-null value. Mixed state checks nothing;
+None is disabled only when all values are empty. Keep selection after submit.
+
+### Mutation and recovery
+
+Extend the existing `useSetTaskColor` mutation implementation with a batch entry
+point; keep the single-task API delegating to the same mutation path. Do not
+call the single-task setter once per ID. For up to 500 unique IDs send one
+`sidebar_task_color_patch` with `if_missing: false`; clearing uses null entries.
+For larger sets, send sequential chunks of at most 500 IDs. The existing backend
+validation, CAS merge, settings response, and personal authorization apply.
+No new endpoint, task mutation, migration, or settings key is needed.
+
+Expose pending state and a completion result to the picker. Apply optimistic
+colors for the captured IDs. Serialize this operation's chunks, track confirmed
+chunks, and stop after the first error. Reconcile responses through the existing
+settings mapper and revision guards. Restore only this operation's outstanding
+optimistic entries, preserving later per-ID changes and unrelated settings;
+a whole-map rollback must not overwrite concurrent edits. Tests must cover
+separate hook instances, late responses, a settings event during saving, and
+single-task edits overlapping a batch. Keep a confirmed baseline per affected
+ID rather than assuming a local optimistic value is confirmed.
+
+After partial failure, retain successful chunks, restore failed/unattempted
+entries, report saved and remaining counts, and allow the same selection to
+retry. Reapplying a color is idempotent. Existing total settings capacity errors
+use this failure path. Pending state prevents duplicate submission from the
+initiating picker; it does not globally lock unrelated settings controls.
+
+### Phone composition and accessibility
+
+Use the existing phone board selection entry point. The board toolbar below
+768px becomes a safe-area-aware compact row with selected count, Color, Actions,
+and Clear. Existing move/archive/delete actions remain reachable inside Actions;
+desktop keeps its inline actions. This prevents the added control widening the
+phone viewport. Preserve desktop preferences across breakpoint changes.
+
+Color opens a short inset `MobilePickerSheet`, the nearest shipped picker
+exemplar. Its fixed title gives the selected count and its single scrolling
+body contains the seven labeled colors and None. Reuse its dynamic-height bound
+and bottom safe-area padding. Desktop uses an anchored menu. Tablet/coarse
+pointer controls retain 44px targets and contained menus; desktop ordinary
+buttons retain 28px sizing. Dismissal performs no write and returns focus.
+Do not add multi-selection to the separate mobile task-switcher drawer in this
+package: the phone board is the equivalent multi-task entry point.
+
+Show localized guidance that automatic rules can override the visible manual
+color. Reuse existing palette translations; new count, mixed, saving, and error
+copy must cover all five locales, with proper plural forms. Tests exercise
+keyboard choice, touch choice, persistence, and actual rendered geometry.
 
 ## Legacy browser migration
 
