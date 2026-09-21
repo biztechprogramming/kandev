@@ -138,9 +138,9 @@ surface.
 - **Interactivity:** all buttons and links with actions must have `cursor-pointer` class.
 - **Self-documenting settings:** every setting must explain in visible, plain-language copy what
   changes, when the setting applies, and when the user should choose each non-obvious option. State
-  important exclusions, precedence, cost, or destructive consequences next to the control when they
-  can affect the decision. Do not rely on tooltips, external documentation, or implementation terms
+  important exclusions, precedence, cost, or destructive consequences next to the control when they can affect the decision. Do not rely on tooltips, external documentation, or implementation terms
   alone to teach the setting.
+- **Settings composition:** use `SettingsGroup` for bordered groups and `SettingsRow` for simple preferences; keep one domain owner/save contributor, attach discovery to actual controls, retain specialized editor/table/diagnostic/credential layouts, and keep collapsed children mounted for discovery and saves.
 - **Settings save coordination:** settings surfaces with local unsaved state must register a
   contributor with `useSettingsSaveContributor` (or use `SettingsPageTemplate`) so the shared
   floating **Save changes** control, navigation guard, and discard flow own persistence. Do not add

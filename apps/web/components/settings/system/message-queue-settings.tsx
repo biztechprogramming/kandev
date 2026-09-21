@@ -212,7 +212,7 @@ function useQueueSettingsContributor({
 }
 
 /** Derives dirty, validation, and permission state for all queue drafts. */
-function useMessageQueueSettingsDraft() {
+export function useMessageQueueSettingsDraft() {
   const { t } = useTranslation();
   const role = useAppStore((state) => state.auth.user?.role);
   const [saveFailed, setSaveFailed] = useState(false);
@@ -259,6 +259,7 @@ function useMessageQueueSettingsDraft() {
     loading: load.loading,
     loadFailed: load.loadFailed,
     saveFailed,
+    invalidReason,
     isDirty: isMaxDirty || isMergeDirty || isAutoMergeDirty,
     isAdmin,
     isLocked,
@@ -406,45 +407,57 @@ function AutoMergeToggleFields({ enabled, onChange, disabled }: MergeToggleField
   );
 }
 
-/** Settings → Task Behavior → Message Queue controls, sharing one save contributor. */
-export function MessageQueueSettings() {
+function MessageQueueLoadingState({ withinGroup }: { withinGroup: boolean }) {
   const { t } = useTranslation();
-  const state = useMessageQueueSettingsDraft();
+  const loadingContent = (
+    <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+      <Spinner className="size-4" />
+      {t("system:messageQueueLoading")}
+    </div>
+  );
+  if (withinGroup) return <div data-testid="message-queue-settings">{loadingContent}</div>;
+  return (
+    <SettingsCard>
+      <CardContent>{loadingContent}</CardContent>
+    </SettingsCard>
+  );
+}
 
-  if (state.loading && !state.snapshot) {
-    return (
-      <SettingsCard>
-        <CardContent className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-          <Spinner className="size-4" />
-          {t("system:messageQueueLoading")}
-        </CardContent>
-      </SettingsCard>
-    );
-  }
-
-  if (state.loadFailed && !state.snapshot) {
-    return <MessageQueueLoadError onRetry={() => void state.reload()} />;
-  }
-
-  if (!state.snapshot) return null;
-  const { settings, effective } = state.snapshot;
+function MessageQueueSettingsReady({
+  state,
+  withinGroup,
+}: MessageQueueSettingsContentProps & {
+  state: NonNullable<MessageQueueSettingsContentProps["state"]>;
+}) {
+  const { t } = useTranslation();
+  const { settings, effective } = state.snapshot!;
   const isConfigurationLocked = state.lockSource === "configuration";
   const effectiveValue =
     effective.max_per_session === 0
       ? t("system:messageQueueUnlimited")
       : String(effective.max_per_session);
 
-  return (
-    <SettingsCard
-      isDirty={state.isDirty}
-      className="min-w-0 w-full"
-      data-testid="message-queue-settings"
-    >
-      <CardHeader>
-        <CardTitle className="text-base">{t("system:messageQueueLimitTitle")}</CardTitle>
-      </CardHeader>
-      <CardContent className="min-w-0 space-y-5">
-        <p className="text-sm text-muted-foreground">{t("system:messageQueueLimitDescription")}</p>
+  const content = (
+    <>
+      {withinGroup ? (
+        <div className="space-y-1 pb-3">
+          <h4 className="text-base font-semibold">{t("system:messageQueueTitle")}</h4>
+          <h5 className="text-sm font-semibold">{t("system:messageQueueLimitTitle")}</h5>
+          <p className="text-sm text-muted-foreground">
+            {t("system:messageQueueLimitDescription")}
+          </p>
+        </div>
+      ) : (
+        <CardHeader>
+          <CardTitle className="text-base">{t("system:messageQueueLimitTitle")}</CardTitle>
+        </CardHeader>
+      )}
+      <CardContent className={withinGroup ? "min-w-0 space-y-5 px-0" : "min-w-0 space-y-5"}>
+        {!withinGroup && (
+          <p className="text-sm text-muted-foreground">
+            {t("system:messageQueueLimitDescription")}
+          </p>
+        )}
         <QueueLimitFields
           draft={state.draft}
           onDraftChange={state.setDraft}
@@ -488,27 +501,82 @@ export function MessageQueueSettings() {
           disabled={!state.isAdmin}
         />
       </CardContent>
+    </>
+  );
+
+  if (withinGroup) {
+    return (
+      <div className="min-w-0 py-3" data-testid="message-queue-settings">
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <SettingsCard
+      isDirty={state.isDirty}
+      className="min-w-0 w-full"
+      data-testid="message-queue-settings"
+    >
+      {content}
     </SettingsCard>
   );
 }
 
-function MessageQueueLoadError({ onRetry }: { onRetry: () => void }) {
+/** Settings → Task Behavior → Message Queue controls, sharing one save contributor. */
+type MessageQueueSettingsContentProps = {
+  state: ReturnType<typeof useMessageQueueSettingsDraft>;
+  withinGroup?: boolean;
+};
+
+export function MessageQueueSettings() {
+  const state = useMessageQueueSettingsDraft();
+  return <MessageQueueSettingsContent state={state} />;
+}
+
+export function MessageQueueSettingsContent({
+  state,
+  withinGroup = false,
+}: MessageQueueSettingsContentProps) {
+  if (state.loading && !state.snapshot) {
+    return <MessageQueueLoadingState withinGroup={withinGroup} />;
+  }
+
+  if (state.loadFailed && !state.snapshot) {
+    return <MessageQueueLoadError onRetry={() => void state.reload()} withinGroup={withinGroup} />;
+  }
+
+  if (!state.snapshot) return null;
+  return <MessageQueueSettingsReady state={state} withinGroup={withinGroup} />;
+}
+
+function MessageQueueLoadError({
+  onRetry,
+  withinGroup = false,
+}: {
+  onRetry: () => void;
+  withinGroup?: boolean;
+}) {
   const { t } = useTranslation();
+  const content = (
+    <div className="space-y-3 py-6">
+      <Alert variant="destructive">
+        <IconAlertCircle className="size-4" />
+        <AlertDescription>{t("system:messageQueueLoadFailed")}</AlertDescription>
+      </Alert>
+      <Button
+        variant="outline"
+        className={settingsActionClassName("cursor-pointer")}
+        onClick={onRetry}
+      >
+        {t("system:messageQueueRetry")}
+      </Button>
+    </div>
+  );
+  if (withinGroup) return <div data-testid="message-queue-settings">{content}</div>;
   return (
     <SettingsCard>
-      <CardContent className="space-y-3 py-6">
-        <Alert variant="destructive">
-          <IconAlertCircle className="size-4" />
-          <AlertDescription>{t("system:messageQueueLoadFailed")}</AlertDescription>
-        </Alert>
-        <Button
-          variant="outline"
-          className={settingsActionClassName("cursor-pointer")}
-          onClick={onRetry}
-        >
-          {t("system:messageQueueRetry")}
-        </Button>
-      </CardContent>
+      <CardContent>{content}</CardContent>
     </SettingsCard>
   );
 }

@@ -20,6 +20,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kande
 import { IconAlertCircle, IconInfoCircle } from "@tabler/icons-react";
 import { useAppStore } from "@/components/state-provider";
 import { SettingsCard } from "./settings-card";
+import { SettingsRow } from "./settings-group";
 import { useSettingsSaveContributor } from "./settings-save-provider";
 import { useTouchDrawer } from "@/hooks/use-compact-task-chrome";
 import { useSleepInhibitionSettings } from "@/hooks/domains/settings/use-sleep-inhibition-settings";
@@ -124,19 +125,29 @@ function useSleepInhibitionState(): SleepInhibitionState {
   };
 }
 
-function SleepInhibitionLoadError({ onRetry }: { onRetry: () => void }) {
+function SleepInhibitionLoadError({
+  onRetry,
+  withinGroup = false,
+}: {
+  onRetry: () => void;
+  withinGroup?: boolean;
+}) {
   const { t } = useTranslation();
+  const content = (
+    <div className="py-6">
+      <Alert variant="destructive">
+        <IconAlertCircle className="size-4" />
+        <AlertDescription>{t("settings:sleepInhibitionLoadFailed")}</AlertDescription>
+      </Alert>
+      <Button variant="outline" className={settingsActionClassName("mt-3")} onClick={onRetry}>
+        {t("settings:sleepInhibitionRetry")}
+      </Button>
+    </div>
+  );
+  if (withinGroup) return <div data-testid="sleep-inhibition-settings">{content}</div>;
   return (
     <SettingsCard data-testid="sleep-inhibition-settings">
-      <CardContent className="py-6">
-        <Alert variant="destructive">
-          <IconAlertCircle className="size-4" />
-          <AlertDescription>{t("settings:sleepInhibitionLoadFailed")}</AlertDescription>
-        </Alert>
-        <Button variant="outline" className={settingsActionClassName("mt-3")} onClick={onRetry}>
-          {t("settings:sleepInhibitionRetry")}
-        </Button>
-      </CardContent>
+      <CardContent>{content}</CardContent>
     </SettingsCard>
   );
 }
@@ -235,10 +246,89 @@ function SleepInhibitionInfoTooltip() {
   );
 }
 
-function SleepInhibitionCard({ state }: { state: SleepInhibitionState }) {
+function SleepInhibitionCard({
+  state,
+  withinGroup = false,
+}: {
+  state: SleepInhibitionState;
+  withinGroup?: boolean;
+}) {
   const { t } = useTranslation();
   const snapshot = state.snapshot;
   if (!snapshot) return null;
+  const control = (
+    <Switch
+      id="task-sleep-inhibition"
+      checked={state.draft ?? snapshot.settings.enabled}
+      disabled={!state.canEdit}
+      data-testid="sleep-inhibition-switch"
+      data-settings-dirty={state.isDirty}
+      onCheckedChange={state.setDraft}
+      className="shrink-0 cursor-pointer"
+    />
+  );
+  const row = (
+    <SettingsRow
+      data-testid="sleep-inhibition-control-row"
+      label={t("settings:sleepInhibitionSwitchLabel")}
+      description={t("settings:sleepInhibitionSwitchHint")}
+      controlId="task-sleep-inhibition"
+      touchTarget="switch"
+      isDirty={state.isDirty}
+      control={control}
+    />
+  );
+  const body = (
+    <>
+      {withinGroup ? (
+        row
+      ) : (
+        <div
+          className="flex min-h-11 items-center justify-between gap-4"
+          data-testid="sleep-inhibition-control-row"
+        >
+          <div className="min-w-0 space-y-0.5">
+            <Label htmlFor="task-sleep-inhibition">
+              {t("settings:sleepInhibitionSwitchLabel")}
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              {t("settings:sleepInhibitionSwitchHint")}
+            </p>
+          </div>
+          {control}
+        </div>
+      )}
+
+      <div className="rounded-md border border-border/70 bg-muted/20 p-3 text-sm">
+        <p data-testid="sleep-inhibition-status">
+          {t("settings:sleepInhibitionStatusLabel")}: {t(statusMessageKey(snapshot))}
+        </p>
+        <p className="mt-2 text-xs text-muted-foreground">{t("settings:sleepInhibitionCaveat")}</p>
+      </div>
+
+      {!state.isAdmin && (
+        <p className="text-sm text-muted-foreground">{t("settings:sleepInhibitionAdminOnly")}</p>
+      )}
+      {state.saveFailed && (
+        <Alert variant="destructive">
+          <IconAlertCircle className="size-4" />
+          <AlertDescription>{t("settings:sleepInhibitionSaveFailed")}</AlertDescription>
+        </Alert>
+      )}
+    </>
+  );
+  if (withinGroup) {
+    return (
+      <div className="min-w-0 space-y-4 py-3" data-testid="sleep-inhibition-settings">
+        <div className="relative flex items-center gap-1 pr-11 sm:pr-0">
+          <h4 className="min-w-0 text-sm font-semibold">{t("settings:sleepInhibitionTitle")}</h4>
+          <SleepInhibitionInfoTooltip />
+        </div>
+        <p className="text-sm text-muted-foreground">{t("settings:sleepInhibitionDescription")}</p>
+        {body}
+      </div>
+    );
+  }
   return (
     <SettingsCard
       isDirty={state.isDirty}
@@ -252,69 +342,42 @@ function SleepInhibitionCard({ state }: { state: SleepInhibitionState }) {
         </CardTitle>
         <CardDescription>{t("settings:sleepInhibitionDescription")}</CardDescription>
       </CardHeader>
-      <CardContent className="min-w-0 space-y-4">
-        <div
-          className="flex min-h-11 items-center justify-between gap-4"
-          data-testid="sleep-inhibition-control-row"
-        >
-          <div className="min-w-0 space-y-0.5">
-            <Label htmlFor="task-sleep-inhibition">
-              {t("settings:sleepInhibitionSwitchLabel")}
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              {t("settings:sleepInhibitionSwitchHint")}
-            </p>
-          </div>
-          <Switch
-            id="task-sleep-inhibition"
-            checked={state.draft ?? snapshot.settings.enabled}
-            disabled={!state.canEdit}
-            data-testid="sleep-inhibition-switch"
-            data-settings-dirty={state.isDirty}
-            onCheckedChange={state.setDraft}
-            className="shrink-0 cursor-pointer"
-          />
-        </div>
-
-        <div className="rounded-md border border-border/70 bg-muted/20 p-3 text-sm">
-          <p data-testid="sleep-inhibition-status">
-            {t("settings:sleepInhibitionStatusLabel")}: {t(statusMessageKey(snapshot))}
-          </p>
-          <p className="mt-2 text-xs text-muted-foreground">
-            {t("settings:sleepInhibitionCaveat")}
-          </p>
-        </div>
-
-        {!state.isAdmin && (
-          <p className="text-sm text-muted-foreground">{t("settings:sleepInhibitionAdminOnly")}</p>
-        )}
-        {state.saveFailed && (
-          <Alert variant="destructive">
-            <IconAlertCircle className="size-4" />
-            <AlertDescription>{t("settings:sleepInhibitionSaveFailed")}</AlertDescription>
-          </Alert>
-        )}
-      </CardContent>
+      <CardContent className="min-w-0 space-y-4">{body}</CardContent>
     </SettingsCard>
   );
 }
 
-export function SleepInhibitionSettings() {
+export function SleepInhibitionSettings({
+  withinGroup = false,
+  onAttentionChange,
+}: {
+  withinGroup?: boolean;
+  onAttentionChange?: (needsAttention: boolean) => void;
+}) {
   const { t } = useTranslation();
   const state = useSleepInhibitionState();
+  useEffect(() => {
+    onAttentionChange?.(state.loadFailed || state.saveFailed);
+  }, [onAttentionChange, state.loadFailed, state.saveFailed]);
 
   if (state.loading && !state.snapshot) {
+    const loadingContent = (
+      <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+        <Spinner className="size-4" />
+        {t("settings:sleepInhibitionLoading")}
+      </div>
+    );
+    if (withinGroup) return <div data-testid="sleep-inhibition-settings">{loadingContent}</div>;
     return (
       <SettingsCard data-testid="sleep-inhibition-settings">
-        <CardContent className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-          <Spinner className="size-4" />
-          {t("settings:sleepInhibitionLoading")}
-        </CardContent>
+        <CardContent>{loadingContent}</CardContent>
       </SettingsCard>
     );
   }
   if (state.loadFailed && !state.snapshot) {
-    return <SleepInhibitionLoadError onRetry={() => void state.reload()} />;
+    return (
+      <SleepInhibitionLoadError onRetry={() => void state.reload()} withinGroup={withinGroup} />
+    );
   }
-  return <SleepInhibitionCard state={state} />;
+  return <SleepInhibitionCard state={state} withinGroup={withinGroup} />;
 }

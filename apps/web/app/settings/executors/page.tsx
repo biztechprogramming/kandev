@@ -22,6 +22,7 @@ import { EXECUTOR_ICON_MAP, getExecutorLabel } from "@/lib/executor-icons";
 import type { Executor, ExecutorProfile } from "@/lib/types/http";
 import { KubernetesReadOnlyNotice } from "@/components/settings/kubernetes-read-only-notice";
 import { settingsActionClassName } from "@/components/settings/settings-control";
+import { SettingsGroup } from "@/components/settings/settings-group";
 import { executorProfileSettingsPath } from "@/lib/settings/executor-settings-routes";
 
 type ProfileWithExecutor = ExecutorProfile & {
@@ -272,8 +273,7 @@ export default function ExecutorsHubPage() {
       <Separator />
       {!canManageKubernetes && <KubernetesReadOnlyNotice />}
       {allProfiles.length > 0 && (
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold">{t("executors:profiles")}</h3>
+        <SettingsGroup title={t("executors:profiles")} contentClassName="space-y-4 divide-y-0">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {allProfiles.map((profile) => (
               <ProfileCard
@@ -284,10 +284,12 @@ export default function ExecutorsHubPage() {
               />
             ))}
           </div>
-        </div>
+        </SettingsGroup>
       )}
-      <div className="space-y-4">
-        <h3 className="text-lg font-semibold">{t("executors:createNewProfile")}</h3>
+      <SettingsGroup
+        title={t("executors:createNewProfile")}
+        contentClassName="space-y-4 divide-y-0"
+      >
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {EXECUTOR_TYPES.map((execType) => (
             <CreateTypeCard
@@ -298,7 +300,7 @@ export default function ExecutorsHubPage() {
             />
           ))}
         </div>
-      </div>
+      </SettingsGroup>
       <DeleteProfileDialog
         profileName={profileToDelete?.name}
         open={Boolean(deleteProfileId)}

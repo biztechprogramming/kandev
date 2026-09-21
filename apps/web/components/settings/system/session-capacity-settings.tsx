@@ -22,23 +22,33 @@ import {
 
 const ENVIRONMENT_VARIABLE = "KANDEV_MAX_CONCURRENT_SESSIONS";
 
-function SessionCapacityLoadError({ onRetry }: { onRetry: () => void }) {
+function SessionCapacityLoadError({
+  onRetry,
+  withinGroup = false,
+}: {
+  onRetry: () => void;
+  withinGroup?: boolean;
+}) {
   const { t } = useTranslation();
+  const content = (
+    <div className="space-y-3 py-6">
+      <Alert variant="destructive">
+        <IconAlertCircle className="size-4" />
+        <AlertDescription>{t("system:sessionCapacityLoadFailed")}</AlertDescription>
+      </Alert>
+      <Button
+        variant="outline"
+        className={settingsActionClassName("cursor-pointer")}
+        onClick={onRetry}
+      >
+        {t("system:sessionCapacityRetry")}
+      </Button>
+    </div>
+  );
+  if (withinGroup) return <div data-testid="session-capacity-settings">{content}</div>;
   return (
     <SettingsCard data-testid="session-capacity-settings">
-      <CardContent className="space-y-3 py-6">
-        <Alert variant="destructive">
-          <IconAlertCircle className="size-4" />
-          <AlertDescription>{t("system:sessionCapacityLoadFailed")}</AlertDescription>
-        </Alert>
-        <Button
-          variant="outline"
-          className={settingsActionClassName("cursor-pointer")}
-          onClick={onRetry}
-        >
-          {t("system:sessionCapacityRetry")}
-        </Button>
-      </CardContent>
+      <CardContent>{content}</CardContent>
     </SettingsCard>
   );
 }
@@ -194,26 +204,40 @@ function sessionCapacityMaximumError({
   return invalidReason;
 }
 
-export function SessionCapacitySettings() {
+function SessionCapacityLoadingState({ withinGroup }: { withinGroup: boolean }) {
   const { t } = useTranslation();
+  const loadingContent = (
+    <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+      <Spinner className="size-4" />
+      {t("system:sessionCapacityLoading")}
+    </div>
+  );
+  if (withinGroup) return <div data-testid="session-capacity-settings">{loadingContent}</div>;
+  return (
+    <SettingsCard data-testid="session-capacity-settings">
+      <CardContent>{loadingContent}</CardContent>
+    </SettingsCard>
+  );
+}
+
+type SessionCapacitySettingsContentProps = {
+  state: ReturnType<typeof useSessionCapacitySettings>;
+  withinGroup?: boolean;
+};
+
+export function SessionCapacitySettings() {
   const state = useSessionCapacitySettings();
+  return <SessionCapacitySettingsContent state={state} />;
+}
 
-  if (state.loading && !state.snapshot) {
-    return (
-      <SettingsCard data-testid="session-capacity-settings">
-        <CardContent className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-          <Spinner className="size-4" />
-          {t("system:sessionCapacityLoading")}
-        </CardContent>
-      </SettingsCard>
-    );
-  }
-  if (state.loadFailed && !state.snapshot) {
-    return <SessionCapacityLoadError onRetry={() => void state.reload()} />;
-  }
-  if (!state.snapshot) return null;
-
-  const { effective, settings } = state.snapshot;
+function SessionCapacitySettingsReady({
+  state,
+  withinGroup,
+}: SessionCapacitySettingsContentProps & {
+  state: NonNullable<SessionCapacitySettingsContentProps["state"]>;
+}) {
+  const { t } = useTranslation();
+  const { effective, settings } = state.snapshot!;
   const controlsDisabled = !state.isAdmin || state.isLocked;
   const effectiveEnabled = state.isLocked ? effective.enabled : state.enabledDraft;
   const effectiveMaximum = state.isLocked ? effective.max_sessions : settings.max_sessions;
@@ -225,19 +249,24 @@ export function SessionCapacitySettings() {
     invalidReason: state.invalidReason,
   });
 
-  return (
-    <SettingsCard
-      isDirty={state.isDirty}
-      className="min-w-0 w-full"
-      data-testid="session-capacity-settings"
-    >
-      <CardHeader>
-        <CardTitle className="text-base">{t("system:sessionCapacityLimitTitle")}</CardTitle>
-        <p className="text-sm text-muted-foreground">
-          {t("system:sessionCapacityLimitDescription")}
-        </p>
-      </CardHeader>
-      <CardContent className="min-w-0 space-y-5">
+  const content = (
+    <>
+      {withinGroup ? (
+        <div className="space-y-1 pb-3">
+          <h4 className="text-sm font-semibold">{t("system:sessionCapacityLimitTitle")}</h4>
+          <p className="text-sm text-muted-foreground">
+            {t("system:sessionCapacityLimitDescription")}
+          </p>
+        </div>
+      ) : (
+        <CardHeader>
+          <CardTitle className="text-base">{t("system:sessionCapacityLimitTitle")}</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            {t("system:sessionCapacityLimitDescription")}
+          </p>
+        </CardHeader>
+      )}
+      <CardContent className={withinGroup ? "min-w-0 space-y-5 px-0" : "min-w-0 space-y-5"}>
         <SessionCapacitySwitch
           checked={effectiveEnabled}
           disabled={controlsDisabled}
@@ -272,6 +301,40 @@ export function SessionCapacitySettings() {
           </Alert>
         )}
       </CardContent>
+    </>
+  );
+
+  if (withinGroup) {
+    return (
+      <div className="min-w-0 py-3" data-testid="session-capacity-settings">
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <SettingsCard
+      isDirty={state.isDirty}
+      className="min-w-0 w-full"
+      data-testid="session-capacity-settings"
+    >
+      {content}
     </SettingsCard>
   );
+}
+
+export function SessionCapacitySettingsContent({
+  state,
+  withinGroup = false,
+}: SessionCapacitySettingsContentProps) {
+  if (state.loading && !state.snapshot) {
+    return <SessionCapacityLoadingState withinGroup={withinGroup} />;
+  }
+  if (state.loadFailed && !state.snapshot) {
+    return (
+      <SessionCapacityLoadError onRetry={() => void state.reload()} withinGroup={withinGroup} />
+    );
+  }
+  if (!state.snapshot) return null;
+  return <SessionCapacitySettingsReady state={state} withinGroup={withinGroup} />;
 }

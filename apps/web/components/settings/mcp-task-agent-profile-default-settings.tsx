@@ -10,6 +10,7 @@ import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { updateUserSettings } from "@/lib/api";
 import type { MCPTaskAgentProfileDefault } from "@/lib/types/http";
 import { SettingsCard } from "./settings-card";
+import { SettingsRow, type SettingsPresentation } from "./settings-group";
 import { GENERAL_SETTINGS_TARGETS } from "@/lib/settings-discovery/catalog/preferences";
 import { useSettingsSaveContributor } from "./settings-save-provider";
 import { Trans, useTranslation } from "react-i18next";
@@ -89,7 +90,66 @@ function MCPTaskProfileScopeDescription() {
   );
 }
 
-export function MCPTaskAgentProfileDefaultSettings() {
+function MCPTaskProfileRadioGroup({
+  value,
+  isDirty,
+  onValueChange,
+  ariaDescribedBy,
+}: {
+  value: MCPTaskAgentProfileDefault;
+  isDirty: boolean;
+  onValueChange: (value: MCPTaskAgentProfileDefault) => void;
+  ariaDescribedBy?: string;
+}) {
+  const { t } = useTranslation();
+  return (
+    <RadioGroup
+      aria-label={t("settings:profileForTasksCreatedByAgents")}
+      aria-describedby={ariaDescribedBy}
+      value={value}
+      onValueChange={(nextValue) => onValueChange(nextValue as MCPTaskAgentProfileDefault)}
+      data-settings-dirty={isDirty}
+      className="gap-3"
+    >
+      {OPTIONS.map((option) => {
+        const labelId = `mcp-task-profile-${option.value}-label`;
+        const descriptionId = `mcp-task-profile-${option.value}-description`;
+        return (
+          <Label
+            key={option.value}
+            htmlFor={`mcp-task-profile-${option.value}`}
+            className="flex min-h-11 w-full min-w-0 cursor-pointer items-start gap-3 rounded-md border p-3 hover:bg-muted/30"
+          >
+            <RadioGroupItem
+              id={`mcp-task-profile-${option.value}`}
+              value={option.value}
+              aria-labelledby={labelId}
+              aria-describedby={descriptionId}
+              className="mt-0.5"
+            />
+            <span className="min-w-0 space-y-1">
+              <span id={labelId} className="block text-sm font-medium">
+                {t(option.labelKey)}
+              </span>
+              <span
+                id={descriptionId}
+                className="block whitespace-normal break-words text-xs text-muted-foreground"
+              >
+                {t(option.descriptionKey)}
+              </span>
+            </span>
+          </Label>
+        );
+      })}
+    </RadioGroup>
+  );
+}
+
+export function MCPTaskAgentProfileDefaultSettings({
+  presentation = "card",
+}: {
+  presentation?: SettingsPresentation;
+}) {
   const { t } = useTranslation();
   const preference = useAppStore((state) => state.userSettings.mcpTaskAgentProfileDefault);
   const setUserSettings = useAppStore((state) => state.setUserSettings);
@@ -124,6 +184,26 @@ export function MCPTaskAgentProfileDefaultSettings() {
     discard: () => setDraft(saved),
   });
 
+  if (presentation === "row") {
+    return (
+      <SettingsRow
+        label={t("settings:profileForTasksCreatedByAgents")}
+        description={<MCPTaskProfileScopeDescription />}
+        descriptionId="mcp-task-profile-description"
+        discoveryTargetId={GENERAL_SETTINGS_TARGETS.agentTaskProfile}
+        isDirty={isDirty}
+        control={
+          <MCPTaskProfileRadioGroup
+            value={draft}
+            isDirty={isDirty}
+            onValueChange={setDraft}
+            ariaDescribedBy="mcp-task-profile-description"
+          />
+        }
+      />
+    );
+  }
+
   return (
     <SettingsCard
       isDirty={isDirty}
@@ -137,44 +217,7 @@ export function MCPTaskAgentProfileDefaultSettings() {
         <MCPTaskProfileScopeDescription />
       </CardHeader>
       <CardContent>
-        <RadioGroup
-          aria-label={t("settings:profileForTasksCreatedByAgents")}
-          value={draft}
-          onValueChange={(value) => setDraft(value as MCPTaskAgentProfileDefault)}
-          data-settings-dirty={isDirty}
-          className="gap-3"
-        >
-          {OPTIONS.map((option) => {
-            const labelId = `mcp-task-profile-${option.value}-label`;
-            const descriptionId = `mcp-task-profile-${option.value}-description`;
-            return (
-              <Label
-                key={option.value}
-                htmlFor={`mcp-task-profile-${option.value}`}
-                className="flex min-h-11 w-full min-w-0 cursor-pointer items-start gap-3 rounded-md border p-3 hover:bg-muted/30"
-              >
-                <RadioGroupItem
-                  id={`mcp-task-profile-${option.value}`}
-                  value={option.value}
-                  aria-labelledby={labelId}
-                  aria-describedby={descriptionId}
-                  className="mt-0.5"
-                />
-                <span className="min-w-0 space-y-1">
-                  <span id={labelId} className="block text-sm font-medium">
-                    {t(option.labelKey)}
-                  </span>
-                  <span
-                    id={descriptionId}
-                    className="block whitespace-normal break-words text-xs text-muted-foreground"
-                  >
-                    {t(option.descriptionKey)}
-                  </span>
-                </span>
-              </Label>
-            );
-          })}
-        </RadioGroup>
+        <MCPTaskProfileRadioGroup value={draft} isDirty={isDirty} onValueChange={setDraft} />
       </CardContent>
     </SettingsCard>
   );

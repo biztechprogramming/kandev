@@ -120,7 +120,27 @@ describe("revealSettingsTarget", () => {
     expect(target.scrollIntoView).toHaveBeenCalledWith({ behavior: "auto", block: "center" });
     expect(document.activeElement).toBe(marked);
   });
+});
 
+describe("revealSettingsTarget disclosures", () => {
+  it("opens enclosing native details before focusing a discovered control", () => {
+    const details = document.createElement("details");
+    const summary = document.createElement("summary");
+    const target = document.createElement("div");
+    const input = document.createElement("input");
+    target.appendChild(input);
+    details.append(summary, target);
+    document.body.appendChild(details);
+    target.scrollIntoView = vi.fn();
+
+    revealSettingsTarget(target, { reducedMotion: true });
+
+    expect(details.open).toBe(true);
+    expect(document.activeElement).toBe(input);
+  });
+});
+
+describe("revealSettingsTarget settling", () => {
   it("re-centers the target when surrounding content grows while settling", () => {
     vi.useFakeTimers();
     let callback: ResizeObserverCallback | undefined;

@@ -86,6 +86,7 @@ export function createSettingsTargetRegistry(
 }
 
 export function revealSettingsTarget(element: HTMLElement, options: RevealOptions = {}): void {
+  openEnclosingDetails(element);
   const reducedMotion = options.reducedMotion ?? prefersReducedMotion();
   element.scrollIntoView?.({
     behavior: reducedMotion ? "auto" : "smooth",
@@ -95,6 +96,14 @@ export function revealSettingsTarget(element: HTMLElement, options: RevealOption
   focusTargetWithin(element);
   restartTargetHighlight(element, options.highlightDurationMs ?? DEFAULT_HIGHLIGHT_DURATION_MS);
   keepTargetCentered(element, options.settleDurationMs ?? DEFAULT_SETTLE_DURATION_MS);
+}
+
+function openEnclosingDetails(element: HTMLElement): void {
+  const ancestors: HTMLDetailsElement[] = [];
+  for (let node = element.parentElement; node; node = node.parentElement) {
+    if (node instanceof HTMLDetailsElement) ancestors.push(node);
+  }
+  for (const details of ancestors.reverse()) details.open = true;
 }
 
 let cancelActiveSettle: (() => void) | null = null;

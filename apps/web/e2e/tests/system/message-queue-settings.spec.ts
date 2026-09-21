@@ -8,6 +8,7 @@ import {
   requestMessageQueueSettings,
   restoreMessageQueueSettings,
 } from "../../helpers/message-queue-settings";
+import { openTaskBehaviorRuntime } from "../../helpers/settings-composition";
 
 test.describe.serial("Message Queue task behavior settings", () => {
   let baseline: MessageQueueSettingsValue | undefined;
@@ -34,6 +35,7 @@ test.describe.serial("Message Queue task behavior settings", () => {
     await expect(testPage).toHaveURL(
       (url) => new URL(url).pathname === "/settings/preferences/task-behavior",
     );
+    await openTaskBehaviorRuntime(testPage);
     await expect(testPage.getByText("Message Queue").first()).toBeVisible();
 
     // The Message Queue box spans the full settings column like every other
@@ -65,6 +67,7 @@ test.describe.serial("Message Queue task behavior settings", () => {
     await expect(testPage.getByTestId("message-queue-source")).toHaveText("Saved setting");
 
     await testPage.reload();
+    await openTaskBehaviorRuntime(testPage);
     await expect(input).toHaveValue(String(updated));
     await expect(testPage.getByTestId("message-queue-effective-value")).toHaveText(String(updated));
   });
@@ -74,6 +77,7 @@ test.describe.serial("Message Queue task behavior settings", () => {
   }) => {
     if (!baseline) throw new Error("message queue settings baseline was not captured");
     await testPage.goto("/settings/general/message-queue");
+    await openTaskBehaviorRuntime(testPage);
     const toggle = testPage.getByTestId("message-queue-merge-enabled");
     await expect(toggle).toBeVisible();
     const wasEnabled = baseline.merge_enabled;
@@ -99,6 +103,7 @@ test.describe.serial("Message Queue task behavior settings", () => {
     await expect(toggle).toHaveAttribute("aria-checked", String(!wasEnabled));
 
     await testPage.reload();
+    await openTaskBehaviorRuntime(testPage);
     await expect(testPage.getByTestId("message-queue-merge-enabled")).toHaveAttribute(
       "aria-checked",
       String(!wasEnabled),
@@ -111,6 +116,7 @@ test.describe.serial("Message Queue task behavior settings", () => {
     if (!baseline) throw new Error("message queue settings baseline was not captured");
     expect(baseline.auto_merge_enabled).toBe(true);
     await testPage.goto("/settings/preferences/task-behavior");
+    await openTaskBehaviorRuntime(testPage);
     const toggle = testPage.getByTestId("message-queue-auto-merge-enabled");
     await expect(toggle).toHaveAttribute("aria-checked", "true");
 
@@ -132,6 +138,7 @@ test.describe.serial("Message Queue task behavior settings", () => {
         auto_merge_enabled: expected,
       });
       await testPage.reload();
+      await openTaskBehaviorRuntime(testPage);
       await expect(testPage.getByTestId("message-queue-auto-merge-enabled")).toHaveAttribute(
         "aria-checked",
         String(expected),
@@ -162,6 +169,7 @@ test.describe.serial("Message Queue task behavior settings", () => {
     });
 
     await testPage.goto("/settings/preferences/task-behavior");
+    await openTaskBehaviorRuntime(testPage);
     await expect(testPage.getByTestId("message-queue-max-per-session")).toBeDisabled();
     await expect(testPage.getByTestId("message-queue-effective-value")).toHaveText("41");
     await expect(testPage.getByTestId("message-queue-source")).toHaveText("Environment");
@@ -195,6 +203,7 @@ test.describe.serial("Message Queue task behavior settings", () => {
     });
 
     await testPage.goto("/settings/preferences/task-behavior");
+    await openTaskBehaviorRuntime(testPage);
     await expect(testPage.getByLabel("Maximum messages per session")).toBeDisabled();
     await expect(testPage.getByTestId("message-queue-effective-value")).toHaveText("43");
     await expect(testPage.getByTestId("message-queue-source")).toHaveText("Configuration");
@@ -226,6 +235,7 @@ test.describe.serial("Message Queue task behavior settings", () => {
     });
     const settingsNav = testPage.getByTestId("app-sidebar-settings-mode");
     await settingsNav.getByRole("link", { name: /^Task Behavior/ }).click();
+    await openTaskBehaviorRuntime(testPage);
 
     await expect(testPage.getByTestId("message-queue-max-per-session")).toBeDisabled();
     await expect(testPage.getByTestId("message-queue-merge-enabled")).toBeDisabled();
