@@ -146,4 +146,6 @@ and Terminal and Editors, flattened simple Appearance preference cards into
 rows, and updated structural/type-scale assertions to inspect the actual
 frameless page composition. Specialized editor, table, and provider bodies
 remain inside their owning group frames. The production Appearance Select also
-forwards its generated row description to the trigger.
+forwards its generated row description to the trigger. The shared section
+adapter now has an explicit frame opt-out for content whose owner remains
+outside the native settings composition.

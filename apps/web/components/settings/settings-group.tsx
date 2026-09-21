@@ -17,6 +17,7 @@ import { SettingsSaveDirtyScope } from "./settings-save-provider";
 import { SettingsFieldLabel, SETTINGS_TYPOGRAPHY } from "./settings-typography";
 import { useSettingsTargetRegistration } from "./settings-target-provider";
 import { UnsavedChangesBadge } from "./unsaved-indicator";
+import { SETTINGS_TARGET_DISCLOSURE_OPEN_EVENT } from "@/lib/settings-discovery/target";
 import { cn } from "@/lib/utils";
 
 export type SettingsPresentation = "card" | "row";
@@ -32,7 +33,8 @@ type SettingsGroupProps = Omit<ComponentProps<"section">, "title"> & {
   collapsible?: boolean;
   defaultOpen?: boolean;
   summary?: ReactNode;
-  revealOn?: boolean;
+  revealOn?: boolean | string;
+  frame?: "card" | "none";
   contentClassName?: string;
   titleTestId?: string;
 };
@@ -108,7 +110,32 @@ function SettingsGroupHeader({
   );
 }
 
-/** A settings group owns one heading and one bordered surface. */
+function SettingsGroupContent({
+  frame,
+  isDirty,
+  contentClassName,
+  children,
+}: {
+  frame: "card" | "none";
+  isDirty: boolean;
+  contentClassName?: string;
+  children: ReactNode;
+}) {
+  if (frame === "none") {
+    return (
+      <div className={cn("min-w-0", contentClassName)} data-settings-group-content="true">
+        {children}
+      </div>
+    );
+  }
+  return (
+    <SettingsCard isDirty={isDirty} className="min-w-0 w-full" data-settings-group-card="true">
+      <div className={cn("divide-y divide-border/70 px-4 py-2", contentClassName)}>{children}</div>
+    </SettingsCard>
+  );
+}
+
+/** A settings group owns one heading and, by default, one bordered surface. */
 export function SettingsGroup({
   title,
   description,
@@ -121,6 +148,7 @@ export function SettingsGroup({
   defaultOpen = true,
   summary,
   revealOn = false,
+  frame = "card",
   className,
   contentClassName,
   titleTestId,
@@ -128,29 +156,37 @@ export function SettingsGroup({
 }: SettingsGroupProps) {
   const registerTarget = useSettingsTargetRegistration(discoveryTargetId);
   const [open, setOpen] = useState(defaultOpen);
-  const wasRevealed = useRef(false);
+  const detailsRef = useRef<HTMLDetailsElement | null>(null);
+  const lastRevealToken = useRef("");
+  const revealToken = revealOn === true ? "true" : revealOn || "";
 
   useEffect(() => {
-    if (revealOn && !wasRevealed.current) setOpen(true);
-    wasRevealed.current = revealOn;
-  }, [revealOn]);
+    if (revealToken && revealToken !== lastRevealToken.current) setOpen(true);
+    lastRevealToken.current = revealToken;
+  }, [revealToken]);
+
+  useEffect(() => {
+    const details = detailsRef.current;
+    if (!details) return;
+    const openFromDiscovery = () => setOpen(true);
+    details.addEventListener(SETTINGS_TARGET_DISCLOSURE_OPEN_EVENT, openFromDiscovery);
+    return () =>
+      details.removeEventListener(SETTINGS_TARGET_DISCLOSURE_OPEN_EVENT, openFromDiscovery);
+  }, []);
 
   return (
     <SettingsSaveDirtyScope>
       {(nestedIsDirty) => {
         const groupIsDirty = isDirty || nestedIsDirty;
         const groupContent = (
-          <SettingsCard
+          <SettingsGroupContent
+            frame={frame}
             isDirty={groupIsDirty}
-            className="min-w-0 w-full"
-            data-settings-group-card="true"
+            contentClassName={contentClassName}
           >
-            <div className={cn("divide-y divide-border/70 px-4 py-2", contentClassName)}>
-              {children}
-            </div>
-          </SettingsCard>
+            {children}
+          </SettingsGroupContent>
         );
-
         return (
           <section
             {...props}
@@ -161,6 +197,7 @@ export function SettingsGroup({
           >
             {collapsible ? (
               <details
+                ref={detailsRef}
                 open={open}
                 onToggle={(event) => setOpen(event.currentTarget.open)}
                 data-settings-group-disclosure="true"

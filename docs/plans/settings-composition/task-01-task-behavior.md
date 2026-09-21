@@ -156,3 +156,9 @@ dirty state into the Runtime group, and exposed the existing localized green
 unsaved status. The focused Task behavior tests cover initial failure, invalid
 draft, save failure after collapse, queue dirty state, and sleep attention while
 the existing system save/reset suites cover successful persistence.
+
+Fixup remediation added owner-specific attention transition keys so a second
+runtime owner reopens the group while the first owner remains failed. It also
+made discovery disclosure opening synchronize through an explicit event and
+added the Sleep attention callback regression. The focused fixup suite passed
+4 files and 28 tests.

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  SETTINGS_TARGET_DISCLOSURE_OPEN_EVENT,
   SETTINGS_TARGET_ATTRIBUTE,
   SETTINGS_TARGET_HIGHLIGHT_ATTRIBUTE,
   createSettingsTargetRegistry,
@@ -132,10 +133,13 @@ describe("revealSettingsTarget disclosures", () => {
     details.append(summary, target);
     document.body.appendChild(details);
     target.scrollIntoView = vi.fn();
+    const opened = vi.fn();
+    details.addEventListener(SETTINGS_TARGET_DISCLOSURE_OPEN_EVENT, opened);
 
     revealSettingsTarget(target, { reducedMotion: true });
 
     expect(details.open).toBe(true);
+    expect(opened).toHaveBeenCalledTimes(1);
     expect(document.activeElement).toBe(input);
   });
 });

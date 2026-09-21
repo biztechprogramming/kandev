@@ -12,6 +12,7 @@ type SettingsSectionProps = {
   action?: ReactNode;
   children: ReactNode;
   discoveryTargetId?: string;
+  framed?: boolean;
   /**
    * Rule the heading off from the body. For a section that *is* its page — the
    * workspace Repositories and Workflows tabs, which have no page heading of
@@ -30,6 +31,7 @@ export function SettingsSection({
   action,
   children,
   discoveryTargetId,
+  framed = true,
   divided = false,
 }: SettingsSectionProps) {
   return (
@@ -45,6 +47,7 @@ export function SettingsSection({
       description={description}
       action={action}
       discoveryTargetId={discoveryTargetId}
+      frame={framed ? "card" : "none"}
       contentClassName={divided ? "border-t border-border/70" : undefined}
     >
       {children}

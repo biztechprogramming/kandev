@@ -2,6 +2,7 @@ export const SETTINGS_TARGET_ATTRIBUTE = "data-settings-target";
 export const SETTINGS_TARGET_FOCUS_ATTRIBUTE = "data-settings-target-focus";
 export const SETTINGS_TARGET_HIGHLIGHT_ATTRIBUTE = "data-settings-target-highlight";
 export const SETTINGS_TARGET_REQUEST_EVENT = "kandev:settings-target";
+export const SETTINGS_TARGET_DISCLOSURE_OPEN_EVENT = "kandev:settings-target-disclosure-open";
 
 export type SettingsTargetRequestDetail = { targetId: string };
 
@@ -103,7 +104,10 @@ function openEnclosingDetails(element: HTMLElement): void {
   for (let node = element.parentElement; node; node = node.parentElement) {
     if (node instanceof HTMLDetailsElement) ancestors.push(node);
   }
-  for (const details of ancestors.reverse()) details.open = true;
+  for (const details of ancestors.reverse()) {
+    details.open = true;
+    details.dispatchEvent(new Event(SETTINGS_TARGET_DISCLOSURE_OPEN_EVENT));
+  }
 }
 
 let cancelActiveSettle: (() => void) | null = null;

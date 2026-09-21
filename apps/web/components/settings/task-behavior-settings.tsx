@@ -73,14 +73,17 @@ export function TaskBehaviorSettings() {
   const queueState = useMessageQueueSettingsDraft();
   const sessionState = useSessionCapacitySettings();
   const [sleepNeedsReveal, setSleepNeedsReveal] = useState(false);
-  const runtimeNeedsReveal =
-    queueState.loadFailed ||
-    queueState.saveFailed ||
-    (queueState.isDirty && Boolean(queueState.invalidReason)) ||
-    sessionState.loadFailed ||
-    sessionState.saveFailed ||
-    (sessionState.isDirty && Boolean(sessionState.invalidReason)) ||
-    sleepNeedsReveal;
+  const runtimeRevealKey = [
+    queueState.loadFailed && "queue-load",
+    queueState.saveFailed && "queue-save",
+    queueState.isDirty && queueState.invalidReason && "queue-invalid",
+    sessionState.loadFailed && "session-load",
+    sessionState.saveFailed && "session-save",
+    sessionState.isDirty && sessionState.invalidReason && "session-invalid",
+    sleepNeedsReveal && "sleep",
+  ]
+    .filter(Boolean)
+    .join("|");
 
   return (
     <div className="space-y-6" data-testid="task-behavior-settings">
@@ -125,7 +128,7 @@ export function TaskBehaviorSettings() {
         collapsible
         defaultOpen={false}
         isDirty={queueState.isDirty || sessionState.isDirty}
-        revealOn={runtimeNeedsReveal}
+        revealOn={runtimeRevealKey}
         data-testid="task-behavior-runtime"
       >
         <SettingsTarget targetId={GENERAL_SETTINGS_TARGETS.sessionCapacity}>

@@ -280,6 +280,19 @@ by focused evidence:
   and `SettingsDetails` summaries have the same touch sizing. The mobile
   composition test taps near a switch target edge.
 
+Fixup remediation on 2026-09-21 addressed the automated review findings:
+
+- Runtime attention now uses owner-specific transition keys, so a queue,
+  session, or sleep failure that arrives while another failure remains active
+  reopens the mounted disclosure after a manual collapse. Discovery also sends
+  an explicit synchronous disclosure-open event to React-controlled groups.
+- Plugin integration routes opt out of the native group frame, preserving the
+  frameless boundary for plugin-owned settings content.
+- Sleep attention now has a load-failure and successful-retry callback test.
+
+The focused fixup suite passed 4 files and 28 tests:
+`(cd apps/web && pnpm exec vitest run components/settings/task-behavior-settings.test.tsx components/settings/sleep-inhibition-settings.test.tsx src/plugin-integration-settings-route.test.tsx lib/settings-discovery/target.test.ts)`.
+
 Remediation checks run after these changes:
 
 - Full settings component matrix: 207 files and 1,400 tests passed.

@@ -40,7 +40,9 @@ Reuse `SettingsPageHeader`, `SettingsSection`, `SettingsCardHeader`, `SettingsFi
 Add small presentation compositions under `components/settings/`, provisionally `settings-group.tsx` and `settings-row.tsx`.
 Do not create a schema-driven settings renderer or a second settings store.
 
-A group has one semantic heading, optional description/action, and one outer `SettingsCard`.
+A group has one semantic heading, optional description/action, and one outer `SettingsCard` by default.
+The `SettingsSection` adapter has an explicit frameless mode for plugin-owned
+content, which remains outside the native settings frame.
 Simple rows have no separate card frame or repeated title.
 Use `SettingsSaveDirtyScope` for aggregate group markers while preserving each field marker.
 Keep one discovery registration per existing target ID, attached to its actual row or subgroup.
@@ -116,7 +118,7 @@ Disabled automatic-session limits show no automatic-session limit.
 Errors reveal the group once per new error transition, allowing users to close it afterward.
 Invalid drafts reveal their group and retain existing Save-disabled feedback.
 
-Extend `revealSettingsTarget` in `lib/settings-discovery/target.ts` to open enclosing native details before scrolling and focusing.
+Extend `revealSettingsTarget` in `lib/settings-discovery/target.ts` to open enclosing native details before scrolling and focusing. Notify React-controlled disclosures synchronously after opening so their controlled state cannot overwrite discovery.
 Reveal outer ancestors first. Preserve existing reduced-motion, settle, and highlight behavior.
 Keep initial fragments, history navigation, and repeated `SETTINGS_TARGET_REQUEST_EVENT` requests on the existing registry path.
 Do not add a separate target registry or navigation bypass.

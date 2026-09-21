@@ -142,3 +142,7 @@ Implemented and verified. System data, logs, About, users, organizations, units,
 - `python3 scripts/list-docs.py validate`: passed (294 decisions, 1,067 specifications).
 - `python3 scripts/lint-spec-files.py --all`: passed.
 - Typecheck, localization checks, ratchet, scoped ESLint, scoped Prettier, and `git diff --check`: passed.
+
+Fixup remediation preserves plugin-owned integration settings as frameless
+content through the explicit `SettingsSection` frame opt-out. The route test
+verifies that the plugin surface is rendered without a native group card.

@@ -120,6 +120,22 @@ describe("TaskBehaviorSettings composition", () => {
     expect(details.open).toBe(true);
   });
 
+  it("reopens runtime when a second owner reports attention while the first remains active", () => {
+    runtimeMocks.queue.loadFailed = true;
+    const view = render(<TaskBehaviorSettings />);
+    const runtime = screen.getByTestId(RUNTIME_GROUP_TEST_ID);
+    const details = runtime.querySelector("details")!;
+    expect(details.open).toBe(true);
+
+    fireEvent.click(details.querySelector("summary")!);
+    expect(details.open).toBe(false);
+
+    runtimeMocks.session.loadFailed = true;
+    view.rerender(<TaskBehaviorSettings />);
+
+    expect(details.open).toBe(true);
+  });
+
   it.each(["queue", "session"] as const)("passes %s dirty state to the runtime group", (owner) => {
     runtimeMocks[owner].isDirty = true;
     render(<TaskBehaviorSettings />);
