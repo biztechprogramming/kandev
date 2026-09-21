@@ -1,0 +1,37 @@
+{
+  "generated_at": "2026-09-21T19:32:00.009Z",
+  "assets": [
+    {
+      "name": "task-behavior-runtime",
+      "type": "screenshot",
+      "format": "png",
+      "file": "settings-composition-pr-capture--task-behavior-runtime.png",
+      "test": "settings-composition-pr-capture.spec.ts",
+      "caption": "Task behavior settings with Runtime limits expanded"
+    },
+    {
+      "name": "appearance-groups",
+      "type": "screenshot",
+      "format": "png",
+      "file": "settings-composition-pr-capture--appearance-groups.png",
+      "test": "settings-composition-pr-capture.spec.ts",
+      "caption": "Appearance settings grouped with shared compact composition"
+    },
+    {
+      "name": "task-behavior-runtime",
+      "type": "screenshot",
+      "format": "png",
+      "file": "mobile-settings-composition-pr-capture--task-behavior-runtime.png",
+      "test": "mobile-settings-composition-pr-capture.spec.ts",
+      "caption": "Mobile task behavior settings with Runtime limits expanded"
+    },
+    {
+      "name": "appearance-groups",
+      "type": "screenshot",
+      "format": "png",
+      "file": "mobile-settings-composition-pr-capture--appearance-groups.png",
+      "test": "mobile-settings-composition-pr-capture.spec.ts",
+      "caption": "Mobile Appearance settings grouped with shared composition"
+    }
+  ]
+}
