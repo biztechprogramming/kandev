@@ -1,0 +1,36 @@
+services:
+  # Build-only: the repo's universal image. Never started (scale 0).
+  kandev-base:
+    scale: 0
+    build:
+      context: .
+      dockerfile: Dockerfile.universal
+    image: kandev:universal
+
+  kandev:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+      additional_contexts:
+        base: service:kandev-base
+    image: kandev:local
+    container_name: kandev
+    restart: unless-stopped
+    ports:
+      - "38429:38429"
+    environment:
+      # Use the host's pnpm store, at the same path the host's node_modules
+      # record. pnpm 11 reads pnpm_config_*, pnpm 9/10 read npm_config_*.
+      pnpm_config_store_dir: /home/andrew/.local/share/pnpm/store
+      npm_config_store_dir: /home/andrew/.local/share/pnpm/store
+    volumes:
+      - /srv/environments/dev:/srv/environments/dev
+      - ~/.kandev:/data
+      - ~/.claude:/data/home/.claude
+      - ~/.codex:/data/home/.codex
+      - ~/.ssh:/data/home/.ssh:ro
+      - ~/.gitconfig:/data/home/.gitconfig.host:ro
+      - ~/.config/gh:/data/home/.config/gh
+      - ~/.cache/node/corepack:/data/home/.cache/node/corepack
+      - ~/.local/share/pnpm:/home/andrew/.local/share/pnpm
+      - /var/run/docker.sock:/var/run/docker.sock
