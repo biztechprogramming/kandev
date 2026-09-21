@@ -34,8 +34,7 @@ import type { TaskMR } from "@/lib/types/gitlab";
 import { useAppStore } from "@/components/state-provider";
 import { useFeature } from "@/hooks/domains/features/use-feature";
 import { useTaskCanvases } from "@/hooks/domains/task/use-task-canvases";
-import type { Canvas } from "@/lib/api/domains/canvas-api";
-import { activateCanvasPanel } from "./dockview-canvas-activation";
+import { activateCanvasPanel, isDiscoverableTaskCanvas } from "./dockview-canvas-activation";
 import { canvasPresentationUserId } from "@/lib/canvas-presentation-storage";
 import { mrTaskKey } from "@/components/gitlab/mr-detail-panel";
 import { RepositoryScriptsMenuItems } from "./repository-scripts-menu";
@@ -69,12 +68,6 @@ export const MENU_ICON_CLASS = "h-3.5 w-3.5 mr-1.5 shrink-0";
 export const MENU_ITEM_CLASS = "cursor-pointer text-xs";
 
 const PR_SUBMENU_TEST_ID = "add-panel-pr-submenu";
-const DISCOVERABLE_TASK_CANVAS_STATUSES = new Set(["active", "pending", "error"]);
-
-export function isDiscoverableTaskCanvas(canvas: Pick<Canvas, "status">): boolean {
-  return DISCOVERABLE_TASK_CANVAS_STATUSES.has(canvas.status);
-}
-
 type ReviewMenuIdentity = Pick<ReviewItemSummary, "providerId" | "reviewKey"> &
   Partial<Pick<ReviewItemSummary, "connectionScope" | "repositoryId" | "changeRequestNumber">>;
 

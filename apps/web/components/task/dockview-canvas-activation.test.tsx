@@ -27,6 +27,12 @@ const {
     auth: { mode: "disabled", user: null },
     connection: { status: "connected" },
     environmentIdBySessionId: { "session-1": "env-1", "session-2": "env-2" },
+    taskSessionsByTask: {
+      itemsByTaskId: {} as Record<string, Array<{ id: string; task_environment_id?: string }>>,
+    },
+    taskSessions: {
+      items: {} as Record<string, { task_environment_id?: string }>,
+    },
   };
   const mockDockviewStore = Object.assign(
     (selector: (state: typeof mockState.current) => unknown) => selector(mockState.current),
@@ -148,6 +154,8 @@ afterEach(() => {
   mockValues.featureEnabled = true;
   mockState.current = { api: null, isRestoringLayout: false, currentLayoutEnvId: null };
   mockAppState.environmentIdBySessionId = { "session-1": "env-1", "session-2": "env-2" };
+  mockAppState.taskSessionsByTask.itemsByTaskId = {};
+  mockAppState.taskSessions.items = {};
   mockAppState.connection.status = "connected";
   window.sessionStorage.clear();
   vi.useRealTimers();
@@ -234,6 +242,31 @@ describe("task-entry inventory filtering", () => {
 });
 
 describe("task-entry layout ownership", () => {
+  it("uses a hydrated task session environment when no session is selected", async () => {
+    const { addPanel } = lifecycleApi();
+    const canvasWithoutSelectedSession = canvas({
+      active_release_id: "release-no-session",
+      active_release_status: "valid",
+    });
+    mockState.current.currentLayoutEnvId = "env-3";
+    mockAppState.taskSessionsByTask.itemsByTaskId[TASK_ID] = [
+      { id: "session-3", task_environment_id: "env-3" },
+    ];
+
+    renderHook(() =>
+      useTaskCanvasLifecycleActivation({
+        taskId: TASK_ID,
+        workspaceId: WORKSPACE_ID,
+        sessionId: null,
+        isMobile: false,
+        taskCanvases: [canvasWithoutSelectedSession],
+        taskCanvasesStatus: "success",
+      }),
+    );
+
+    await vi.waitFor(() => expect(addPanel).toHaveBeenCalledTimes(1));
+  });
+
   it("waits for the target task environment before recording a presentation", async () => {
     const { api, addPanel } = lifecycleApi();
     const taskB = "task-2";
@@ -409,6 +442,25 @@ describe("canvas lifecycle panels", () => {
     expect(wasCanvasPresented(presentedIdentity(older.id))).toBe(true);
     expect(wasCanvasPresented(presentedIdentity(newer.id))).toBe(true);
   });
+
+  it("records a restored receipt for a canvas already open in dockview", () => {
+    const addPanel = vi.fn();
+    const api = {
+      addPanel,
+      getPanel: vi.fn().mockReturnValue({ api: { setActive: vi.fn() } }),
+      groups: [{ id: "center" }],
+      panels: [],
+    };
+
+    reconcileTaskCanvasPanels(api as never, [canvas({ id: "canvas-restored" })], {
+      userId: "anonymous",
+      workspaceId: WORKSPACE_ID,
+      taskId: TASK_ID,
+    });
+
+    expect(addPanel).not.toHaveBeenCalled();
+    expect(wasCanvasPresented(presentedIdentity("canvas-restored"))).toBe(true);
+  });
 });
 
 describe("canvas lifecycle decisions", () => {
@@ -513,6 +565,36 @@ describe("canvas lifecycle asynchronous activation", () => {
 
     await vi.waitFor(() => expect(mockGetCanvas).toHaveBeenCalledTimes(1));
     expect(addPanel).not.toHaveBeenCalled();
+  });
+
+  it("retries a hint lookup when a newer generation invalidates the pending one", async () => {
+    const { api, addPanel } = lifecycleApi();
+    mockState.current = { api, isRestoringLayout: false, currentLayoutEnvId: "env-1" };
+    mockGetHints.mockReturnValue([hint({ revision: 31 })]);
+    let resolveFirst!: (value: Canvas) => void, resolveSecond!: (value: Canvas) => void;
+    const first = new Promise<Canvas>((resolve) => (resolveFirst = resolve));
+    const second = new Promise<Canvas>((resolve) => (resolveSecond = resolve));
+    mockGetCanvas.mockReturnValueOnce(first).mockReturnValueOnce(second);
+
+    const hook = renderHook(() =>
+      useTaskCanvasLifecycleActivation({
+        taskId: TASK_ID,
+        workspaceId: WORKSPACE_ID,
+        sessionId: "session-1",
+        isMobile: false,
+        taskCanvases: [],
+        taskCanvasesStatus: "success",
+      }),
+    );
+    await vi.waitFor(() => expect(mockGetCanvas).toHaveBeenCalledTimes(1));
+
+    mockValues.revision += 1;
+    hook.rerender();
+    await vi.waitFor(() => expect(mockGetCanvas).toHaveBeenCalledTimes(2));
+
+    resolveSecond(canvas({ active_release_id: "release-1", active_release_status: "valid" }));
+    await vi.waitFor(() => expect(addPanel).toHaveBeenCalledTimes(1));
+    resolveFirst(canvas({ active_release_id: "release-1", active_release_status: "valid" }));
   });
 });
 

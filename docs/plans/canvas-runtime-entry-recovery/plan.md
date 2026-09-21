@@ -167,9 +167,10 @@ focused web tests, full web lint, i18n checks, web typecheck, and the managed
 desktop and phone E2E suites passed. `make -C apps/backend build` and
 `pnpm --filter @kandev/web build:vite` passed. The authenticated proxy suites
 passed with 5 desktop and 2 phone tests; the task-entry suites passed with 6
-desktop and 4 phone tests. The focused component and hook suite passed 56 tests,
+desktop and 4 phone tests. The focused component and hook suite passed 61 tests,
 including deferred request invalidation, authenticated identity, mixed inventory,
-delayed layout ownership, batch focus, and receipt regressions. Full web lint
+delayed layout ownership, batch focus, restored-panel receipts, and duplicated-tab
+receipt isolation. Full web lint
 passed with zero warnings. `pnpm run i18n:check` passed; it reported the
 repository's existing orphan catalog warnings without failing. Public-doc validation passed 62 tests and
 validated 47 pages. `python3 scripts/list-docs.py validate` passed with 294

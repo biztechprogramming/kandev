@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 import type { DockviewApi } from "dockview-react";
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { useFeature } from "@/hooks/domains/features/use-feature";
-import { canvasHref, getCanvas, type Canvas } from "@/lib/api/domains/canvas-api";
+import type { Canvas } from "@/lib/api/domains/canvas-api";
 import {
   getCanvasLifecycleHints,
   type CanvasLifecycleHint,
@@ -24,8 +24,16 @@ import { parseStrictRfc3339Timestamp } from "@/lib/utils/strict-timestamp";
 import {
   useTaskCanvasesState,
   type TaskCanvasesLoadStatus,
-  type TaskCanvasesState,
 } from "@/hooks/domains/task/use-task-canvases";
+import type { AppState } from "@/lib/state/store";
+import {
+  readCanvasInventory,
+  reconcileTaskCanvasCandidates,
+  type CanvasInventoryRef,
+  type DockviewLayoutSnapshot,
+  type ProvidedCanvasInventoryRef,
+  type ReconcileRef,
+} from "./dockview-canvas-reconciliation";
 
 const CANVAS_PANEL_ID_PREFIX = "canvas:";
 const CANVAS_ACTIVATION_RETRY_DELAY_MS = 500;
@@ -35,6 +43,10 @@ const CANVAS_RELEASE_ACTIONS = new Set<CanvasLifecycleHint["action"]>([
   "canvas.release.permission_required",
 ]);
 const DISCOVERABLE_TASK_CANVAS_STATUSES = new Set(["active", "pending", "error"]);
+
+export function isDiscoverableTaskCanvas(canvas: Pick<Canvas, "status">): boolean {
+  return DISCOVERABLE_TASK_CANVAS_STATUSES.has(canvas.status);
+}
 
 export function shouldActivateCanvasForTask(
   hint: CanvasLifecycleHint,
@@ -56,12 +68,6 @@ function canvasPanelId(canvasId: string): string {
 function canvasPanelGroupId(api: DockviewApi): string | undefined {
   return fallbackGroupPosition(api)?.referenceGroup;
 }
-
-type DockviewLayoutSnapshot = {
-  api: DockviewApi | null;
-  isRestoringLayout: boolean;
-  currentLayoutEnvId: string | null;
-};
 
 function readDockviewLayout(): DockviewLayoutSnapshot {
   const state = useDockviewStore.getState();
@@ -87,7 +93,7 @@ export function isTaskCanvasPresentationEligible(
   workspaceId: string,
 ): boolean {
   if (
-    !DISCOVERABLE_TASK_CANVAS_STATUSES.has(canvas.status) ||
+    !isDiscoverableTaskCanvas(canvas) ||
     canvas.scope_kind !== "task" ||
     canvas.task_id !== taskId ||
     canvas.workspace_id !== workspaceId
@@ -263,8 +269,9 @@ export function reconcileTaskCanvasPanels(
       // A panel that fails to insert has not been presented and remains eligible.
     }
   });
+  const addedIds = new Set(added.map((canvas) => canvas.id));
   candidates.forEach((canvas) => {
-    if (api.getPanel(canvasPanelId(canvas.id))) {
+    if (!addedIds.has(canvas.id) && api.getPanel(canvasPanelId(canvas.id))) {
       recordCanvasPresentation(canvasIdentity(identity, canvas.id), "restored");
     }
   });
@@ -318,155 +325,6 @@ type CanvasLifecycleActivationProps = {
   taskCanvasesStatus?: TaskCanvasesLoadStatus;
 };
 
-type CanvasInventorySnapshot = {
-  canvases: readonly Canvas[];
-  status: TaskCanvasesLoadStatus;
-};
-
-type CanvasInventoryRef = { current: TaskCanvasesState };
-type ProvidedCanvasInventoryRef = {
-  current: { canvases?: readonly Canvas[]; status?: TaskCanvasesLoadStatus };
-};
-type ReconcileRef = {
-  current: ((hints: CanvasLifecycleHint[], attempt: number) => void) | null;
-};
-
-function readCanvasInventory(
-  inventoryRef: CanvasInventoryRef,
-  providedRef: ProvidedCanvasInventoryRef,
-): CanvasInventorySnapshot {
-  const provided = providedRef.current;
-  if (provided.canvases !== undefined) {
-    return { canvases: provided.canvases, status: provided.status ?? "success" };
-  }
-  return inventoryRef.current;
-}
-
-type ResolveHintOptions = {
-  hint: CanvasLifecycleHint;
-  attempt: number;
-  taskId: string;
-  workspaceId: string;
-  inventoryRef: CanvasInventoryRef;
-  providedInventoryRef: ProvidedCanvasInventoryRef;
-  inFlight: Set<string>;
-  isCurrent: () => boolean;
-  scheduleRetry: (hint: CanvasLifecycleHint, attempt: number) => void;
-};
-
-async function resolveTaskCanvasHint(options: ResolveHintOptions): Promise<Canvas | null> {
-  const { hint, taskId, workspaceId } = options;
-  const key = hintKey(hint, taskId);
-  if (isHandled(hint, taskId) || options.inFlight.has(key)) return null;
-
-  options.inFlight.add(key);
-  try {
-    const snapshot = readCanvasInventory(options.inventoryRef, options.providedInventoryRef);
-    const listed =
-      snapshot.status === "success"
-        ? snapshot.canvases.find((canvas) => canvas.id === hint.payload.canvas_id)
-        : undefined;
-    const canvas = listed ?? (await getCanvas(hint.payload.canvas_id));
-    if (!options.isCurrent()) return null;
-    if (canvas.workspace_id !== workspaceId) {
-      markHandled(hint, taskId);
-      return null;
-    }
-
-    const decision = canvasLifecycleActivationDecision(hint, canvas);
-    if (decision === "retry") {
-      options.scheduleRetry(hint, options.attempt);
-      return null;
-    }
-    markHandled(hint, taskId);
-    return decision === "eligible" ? canvas : null;
-  } catch {
-    if (options.isCurrent()) options.scheduleRetry(hint, options.attempt);
-    return null;
-  } finally {
-    options.inFlight.delete(key);
-  }
-}
-
-type ReconcileTaskCanvasOptions = {
-  hints: CanvasLifecycleHint[];
-  attempt: number;
-  taskId: string;
-  workspaceId: string;
-  identity: Omit<CanvasPresentationIdentity, "canvasId">;
-  readTaskEnvironmentId: () => string | null;
-  readDockviewLayout: () => DockviewLayoutSnapshot;
-  isMobile: boolean;
-  router: AppRouter;
-  mobileNavigationRef: { current: string | null };
-  inventoryRef: CanvasInventoryRef;
-  providedInventoryRef: ProvidedCanvasInventoryRef;
-  inFlight: Set<string>;
-  isCurrent: () => boolean;
-  scheduleRetry: (hint: CanvasLifecycleHint, attempt: number) => void;
-};
-
-async function reconcileTaskCanvasCandidates(options: ReconcileTaskCanvasOptions): Promise<void> {
-  if (!options.isCurrent()) return;
-  if (
-    !options.isMobile &&
-    !layoutOwnsTask(options.readDockviewLayout(), options.readTaskEnvironmentId())
-  ) {
-    return;
-  }
-
-  const snapshot = readCanvasInventory(options.inventoryRef, options.providedInventoryRef);
-  const listedCandidates =
-    snapshot.status === "success"
-      ? snapshot.canvases.filter((canvas) =>
-          isTaskCanvasPresentationEligible(canvas, options.taskId, options.workspaceId),
-        )
-      : [];
-  const hintedCandidates = (
-    await Promise.all(options.hints.map((hint) => resolveTaskCanvasHint({ ...options, hint })))
-  ).filter((canvas): canvas is Canvas => canvas !== null);
-  if (!options.isCurrent()) return;
-
-  const currentLayout = options.readDockviewLayout();
-  const currentTaskEnvironmentId = options.readTaskEnvironmentId();
-  if (!options.isMobile && !layoutOwnsTask(currentLayout, currentTaskEnvironmentId)) return;
-
-  const uniqueCanvases = new Map<string, Canvas>();
-  [...listedCandidates, ...hintedCandidates].forEach((canvas) => {
-    if (isTaskCanvasPresentationEligible(canvas, options.taskId, options.workspaceId)) {
-      uniqueCanvases.set(canvas.id, canvas);
-    }
-  });
-  const candidates = sortTaskCanvasPresentationCandidates([...uniqueCanvases.values()]).filter(
-    (canvas) => !wasCanvasPresented(canvasIdentity(options.identity, canvas.id)),
-  );
-  if (candidates.length === 0) return;
-
-  if (options.isMobile) {
-    const decision = selectMobileCanvasPresentation(candidates, options.identity);
-    if (!decision || options.mobileNavigationRef.current) return;
-    options.mobileNavigationRef.current = decision.canvas.id;
-    try {
-      options.router.push(canvasHref(decision.canvas.id), {
-        onNavigated: () => {
-          if (!options.isCurrent()) return;
-          decision.offered.forEach((canvas) =>
-            recordCanvasPresentation(canvasIdentity(options.identity, canvas.id), "automatic"),
-          );
-          options.mobileNavigationRef.current = null;
-        },
-      });
-    } catch {
-      options.mobileNavigationRef.current = null;
-    }
-    return;
-  }
-
-  if (currentLayout.api) {
-    reconcileTaskCanvasPanels(currentLayout.api, candidates, options.identity);
-  }
-}
-
 type CanvasActivationEffectOptions = {
   enabled: boolean;
   taskId: string | null;
@@ -513,23 +371,38 @@ function useCanvasActivationEffect(options: CanvasActivationEffectOptions): void
       retryTimers.add(timer);
     };
     const runReconcile = (hints: CanvasLifecycleHint[], attempt: number) => {
-      void reconcileTaskCanvasCandidates({
-        hints,
-        attempt,
-        taskId,
-        workspaceId,
-        identity,
-        readTaskEnvironmentId: options.readTaskEnvironmentId,
-        readDockviewLayout,
-        isMobile: options.isMobile,
-        router: options.router,
-        mobileNavigationRef: options.mobileNavigationRef,
-        inventoryRef: options.inventoryRef,
-        providedInventoryRef: options.providedInventoryRef,
-        inFlight: options.inFlightRef.current,
-        isCurrent,
-        scheduleRetry,
-      });
+      void reconcileTaskCanvasCandidates(
+        {
+          hints,
+          attempt,
+          generation,
+          taskId,
+          workspaceId,
+          identity,
+          readTaskEnvironmentId: options.readTaskEnvironmentId,
+          readDockviewLayout,
+          isMobile: options.isMobile,
+          router: options.router,
+          mobileNavigationRef: options.mobileNavigationRef,
+          inventoryRef: options.inventoryRef,
+          providedInventoryRef: options.providedInventoryRef,
+          inFlight: options.inFlightRef.current,
+          isCurrent,
+          scheduleRetry,
+        },
+        {
+          hintKey,
+          isHandled,
+          markHandled,
+          layoutOwnsTask,
+          isTaskCanvasPresentationEligible,
+          sortTaskCanvasPresentationCandidates,
+          canvasIdentity,
+          canvasLifecycleActivationDecision,
+          selectMobileCanvasPresentation,
+          reconcileTaskCanvasPanels,
+        },
+      );
     };
     retryReconcile.current = runReconcile;
     options.reconcileRef.current = runReconcile;
@@ -565,6 +438,23 @@ function useCanvasActivationEffect(options: CanvasActivationEffectOptions): void
   ]);
 }
 
+function resolveTaskEnvironmentId(
+  state: Pick<AppState, "environmentIdBySessionId" | "taskSessions" | "taskSessionsByTask">,
+  taskId: string | null,
+  sessionId: string | null | undefined,
+): string | null {
+  if (sessionId) {
+    const mapped = state.environmentIdBySessionId[sessionId];
+    if (mapped) return mapped;
+    const sessionEnvironment = state.taskSessions.items[sessionId]?.task_environment_id;
+    if (sessionEnvironment) return sessionEnvironment;
+  }
+
+  const sessions = taskId ? (state.taskSessionsByTask.itemsByTaskId[taskId] ?? []) : [];
+  const candidates = sessionId ? sessions.filter((session) => session.id === sessionId) : sessions;
+  return candidates.find((session) => session.task_environment_id)?.task_environment_id ?? null;
+}
+
 /** React to retained or newly-arrived release events for the active task.
  * Metadata remains authoritative, so the event only identifies which canvas
  * to refetch and open. */
@@ -590,11 +480,11 @@ export function useTaskCanvasLifecycleActivation({
   const defaultUserId = useAppStore((state) => canvasPresentationUserId(state.auth));
   const appStoreApi = useAppStoreApi();
   const taskEnvironmentId = useAppStore((state) =>
-    sessionId ? (state.environmentIdBySessionId[sessionId] ?? null) : null,
+    resolveTaskEnvironmentId(state, taskId, sessionId),
   );
   const readTaskEnvironmentId = useCallback(
-    () => (sessionId ? (appStoreApi.getState().environmentIdBySessionId[sessionId] ?? null) : null),
-    [appStoreApi, sessionId],
+    () => resolveTaskEnvironmentId(appStoreApi.getState(), taskId, sessionId),
+    [appStoreApi, sessionId, taskId],
   );
   const router = useRouter();
   const inFlightRef = useRef(new Set<string>());
