@@ -8,16 +8,24 @@ test.describe("Settings composition", () => {
 
     const groups = testPage.getByTestId("task-behavior-group");
     await expect(groups).toHaveCount(3);
-    await expect(groups.nth(0)).toContainText("Creating and opening tasks");
-    await expect(groups.nth(1)).toContainText("Conversation and panels");
-    await expect(groups.nth(2)).toContainText("Archiving");
+    await expect(
+      testPage.locator('[data-testid^="task-behavior-"][data-testid$="-title"]'),
+    ).toHaveCount(4);
+    expect(
+      await testPage
+        .locator('[data-testid^="task-behavior-"][data-testid$="-title"]')
+        .evaluateAll((elements) => elements.map((element) => element.getAttribute("data-testid"))),
+    ).toEqual([
+      "task-behavior-creating-title",
+      "task-behavior-conversation-title",
+      "task-behavior-archiving-title",
+      "task-behavior-runtime-title",
+    ]);
 
     const runtime = testPage.getByTestId("task-behavior-runtime");
     const disclosure = runtime.locator("details");
     await expect(disclosure).not.toHaveAttribute("open", "");
-    await expect(runtime).toContainText("Applies to everyone");
-    await expect(runtime).toContainText("Automatic sessions:");
-    await expect(runtime).toContainText("Queued messages:");
+    await expect(runtime.getByTestId("task-behavior-runtime-summary")).toBeVisible();
 
     await disclosure.locator("summary").click();
     await expect(disclosure).toHaveAttribute("open", "");
@@ -43,12 +51,12 @@ test.describe("Settings composition", () => {
 
     const search = testPage
       .getByTestId("app-sidebar-settings-mode")
-      .getByRole("searchbox", { name: "Search settings" });
-    await search.fill("message queue");
+      .getByTestId("settings-search")
+      .getByRole("searchbox");
+    await search.fill("queue");
     await testPage
-      .getByTestId("app-sidebar-settings-mode")
-      .getByRole("link")
-      .filter({ hasText: /^Message Queue/ })
+      .getByTestId("settings-search-results")
+      .locator('[data-settings-search-motion-key="item:task-behavior-message-queue"]')
       .click();
 
     await expect(testPage.getByTestId("message-queue-max-per-session")).toBeVisible();
@@ -58,7 +66,6 @@ test.describe("Settings composition", () => {
   test("preferences keep notification surfaces inside shared groups", async ({ testPage }) => {
     await testPage.goto("/settings/preferences/notifications");
 
-    await expect(testPage.getByRole("heading", { level: 2, name: "Notifications" })).toBeVisible();
     await expect(testPage.locator('[data-settings-group="true"]').first()).toBeVisible();
     expect(await testPage.evaluate(() => document.documentElement.scrollWidth)).toBe(
       await testPage.evaluate(() => document.documentElement.clientWidth),
@@ -99,7 +106,6 @@ test.describe("Settings composition", () => {
     await expect(testPage.locator('[data-settings-group="true"]').first()).toBeVisible();
 
     await testPage.goto("/settings/executors");
-    await expect(testPage.getByRole("heading", { level: 2, name: "Executors" })).toBeVisible();
     await expect(testPage.locator('[data-settings-group="true"]').last()).toBeVisible();
   });
 

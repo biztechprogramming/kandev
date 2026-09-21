@@ -90,6 +90,7 @@ export function TaskBehaviorSettings() {
       <SettingsGroup
         title={t("settings:taskBehaviorCreating")}
         description={t("settings:taskBehaviorCreatingDescription")}
+        titleTestId="task-behavior-creating-title"
         data-testid="task-behavior-group"
       >
         <CreationAutoFocusSettings presentation="row" />
@@ -101,6 +102,7 @@ export function TaskBehaviorSettings() {
       <SettingsGroup
         title={t("settings:taskBehaviorConversation")}
         description={t("settings:taskBehaviorConversationDescription")}
+        titleTestId="task-behavior-conversation-title"
         data-testid="task-behavior-group"
       >
         <UnreadDividerSettings presentation="row" />
@@ -111,6 +113,7 @@ export function TaskBehaviorSettings() {
       <SettingsGroup
         title={t("settings:taskBehaviorArchiving")}
         description={t("settings:taskBehaviorArchivingDescription")}
+        titleTestId="task-behavior-archiving-title"
         data-testid="task-behavior-group"
       >
         <ArchiveConfirmationSettings presentation="row" />
@@ -119,6 +122,7 @@ export function TaskBehaviorSettings() {
       <SettingsGroup
         title={t("settings:taskBehaviorRuntime")}
         description={t("settings:taskBehaviorRuntimeDescription")}
+        titleTestId="task-behavior-runtime-title"
         summary={
           <>
             <RuntimeSummary queueState={queueState} sessionState={sessionState} />{" "}

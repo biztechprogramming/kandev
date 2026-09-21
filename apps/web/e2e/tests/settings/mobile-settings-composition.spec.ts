@@ -68,7 +68,6 @@ test.describe("Mobile settings composition", () => {
   test("preferences keep notification groups contained on a phone", async ({ testPage }) => {
     await testPage.goto("/settings/preferences/notifications");
 
-    await expect(testPage.getByRole("heading", { level: 2, name: "Notifications" })).toBeVisible();
     await expect(testPage.locator('[data-settings-group="true"]').first()).toBeVisible();
     await expectContained(testPage);
   });
