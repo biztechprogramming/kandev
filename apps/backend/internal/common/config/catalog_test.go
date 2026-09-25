@@ -20,6 +20,7 @@ func TestConfigurationCatalogIsComplete(t *testing.T) {
 		"tasks.preparationTimeout",
 		"credentials.file",
 		"limits.ghMaxConcurrent",
+		"limits.lspMaxConnections",
 		"messageQueue.maxPerSession",
 		"agentctl.notificationQueueCapacity",
 		"launcher.noBrowser",
@@ -27,6 +28,10 @@ func TestConfigurationCatalogIsComplete(t *testing.T) {
 		if _, ok := CatalogEntryForKey(key); !ok {
 			t.Errorf("catalog is missing %q", key)
 		}
+	}
+	entry, ok := CatalogEntryForKey("limits.lspMaxConnections")
+	if !ok || !strings.Contains(entry.Description, "including leases detached from a browser") {
+		t.Fatalf("LSP capacity description = %q, want detached leases included", entry.Description)
 	}
 }
 
@@ -113,6 +118,15 @@ func auditedStartupEnvironmentInventory() []auditedStartupEnvironment {
 		{envVar: "KANDEV_DEBUG_PPROF_ENABLED", class: "catalog"},
 		{envVar: "KANDEV_OFFICE_JWTSIGNINGKEY", class: "catalog"},
 		{envVar: "KANDEV_OFFICE_SCHEDULER_TICK_MS", class: "catalog"},
+		{envVar: "KANDEV_OFFICE_MAX_CONCURRENT_INSTANCE", class: "catalog"},
+		{envVar: "KANDEV_OFFICE_MAX_CONCURRENT_WORKSPACE", class: "catalog"},
+		{envVar: "KANDEV_OFFICE_WORKSPACE_BUDGET_PER_HOUR", class: "catalog"},
+		{envVar: "KANDEV_OFFICE_ROUTINE_BUDGET_PER_HOUR", class: "catalog"},
+		{envVar: "KANDEV_OFFICE_PROMOTION_AGE_MINUTES", class: "catalog"},
+		{envVar: "KANDEV_OFFICE_MAX_CAUSATION_DEPTH", class: "catalog"},
+		{envVar: "KANDEV_OFFICE_SELF_TRIGGER_ALLOWANCE", class: "catalog"},
+		{envVar: "KANDEV_OFFICE_SELF_TRIGGER_TOTAL_ALLOWANCE", class: "catalog"},
+		{envVar: "KANDEV_OFFICE_GATE_FAILURE_THRESHOLD", class: "catalog"},
 		{envVar: "KANDEV_GITHUB_CREDENTIAL_BROKER_PUBLIC_BASE_URL", class: "catalog"},
 		{envVar: "KANDEV_TASK_PREPARATION_TIMEOUT", class: "catalog"},
 		{envVar: "KANDEV_TASK_STALL_DETECTION_THRESHOLD", class: "catalog"},
@@ -134,6 +148,7 @@ func auditedStartupEnvironmentInventory() []auditedStartupEnvironment {
 		{envVar: "KANDEV_WEB_PORT", class: "catalog"},
 		{envVar: "KANDEV_HEALTH_TIMEOUT_MS", class: "catalog"},
 		{envVar: "KANDEV_NO_BROWSER", class: "catalog"},
+		{envVar: "KANDEV_EXECUTORS_SSHREACHABILITYINTERVALSECONDS", class: "catalog"},
 		{envVar: InternalConfigFileEnv, class: "exclusion"},
 		{envVar: InternalConfigHomeFileEnv, class: "exclusion"},
 		{envVar: InternalAgentctlStartupConfigEnv, class: "exclusion"},

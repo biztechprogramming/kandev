@@ -1716,6 +1716,9 @@ func (s *Service) autoStartTaskForStep(ctx context.Context, taskID, stepID, even
 		}
 		return
 	}
+	if s.skipForkPRAutoStart(ctx, task, eventName, autoStartOnCreateClaimed) {
+		return
+	}
 	if task.QueuedForStepID != "" {
 		if autoStartOnCreateClaimed {
 			s.restoreAutoStartOnCreate(ctx, taskID, eventName)
@@ -1948,6 +1951,9 @@ func (s *Service) autoStartTaskForLoadedStep(ctx context.Context, task *models.T
 		}
 		return
 	}
+	if s.skipForkPRAutoStart(ctx, task, eventName, autoStartOnCreateClaimed) {
+		return
+	}
 	if models.HasAutoStartOnCreateIntent(task.Metadata) || models.HasAutoStartOnCreateInFlight(task.Metadata) || autoStartOnCreateClaimed {
 		sessions, err := s.repo.ListTaskSessions(ctx, task.ID)
 		if err != nil {
@@ -2095,6 +2101,26 @@ func (s *Service) autoStartTaskForLoadedStep(ctx context.Context, task *models.T
 			s.completeAutoStartOnCreate(asyncCtx, task.ID, eventName)
 		}
 	}()
+}
+
+func taskRequiresManualForkPRStart(task *models.Task) bool {
+	if task == nil || task.Metadata == nil {
+		return false
+	}
+	required, _ := task.Metadata[models.MetaKeyForkPRRequiresManualStart].(bool)
+	return required
+}
+
+func (s *Service) skipForkPRAutoStart(ctx context.Context, task *models.Task, eventName string, autoStartOnCreateClaimed bool) bool {
+	if !taskRequiresManualForkPRStart(task) {
+		return false
+	}
+	s.logger.Info(eventName+": fork review task is waiting for a manual start",
+		zap.String("task_id", task.ID))
+	if autoStartOnCreateClaimed || models.HasAutoStartOnCreateIntent(task.Metadata) || models.HasAutoStartOnCreateInFlight(task.Metadata) {
+		s.discardAutoStartOnCreate(ctx, task.ID, eventName)
+	}
+	return true
 }
 
 // autoStartOfficeTaskForLoadedStep is the Office-aware counterpart of the
@@ -4110,34 +4136,68 @@ func (s *Service) preflightWorkflowStepCredentials(
 	currentSession *models.TaskSession,
 	targetStep *wfmodels.WorkflowStep,
 ) error {
+	return s.preflightWorkflowStepCredentialsWithCandidate(ctx, taskID, nil, currentSession, targetStep)
+}
+
+func (s *Service) preflightWorkflowStepCredentialsWithCandidate(
+	ctx context.Context,
+	taskID string,
+	candidate *models.Task,
+	currentSession *models.TaskSession,
+	targetStep *wfmodels.WorkflowStep,
+) error {
 	if currentSession == nil || targetStep == nil {
 		return nil
 	}
 	ctx = withWorkflowMetaCache(ctx)
 	if targetStep.SessionTarget != nil {
-		resolution, err := s.resolveWorkflowSessionTarget(ctx, taskID, targetStep)
-		if err != nil {
-			return err
-		}
-		targetSession := currentSession
-		if s.resolveStepProfileSessionStartPolicy(targetStep) == models.WorkflowProfileSessionStartPolicyReuse && resolution.session != nil {
-			targetSession = resolution.session
-		}
-		task, err := s.repo.GetTask(ctx, taskID)
-		if err != nil {
-			return fmt.Errorf("get task for explicit credential preflight: %w", err)
-		}
-		if task == nil {
-			return fmt.Errorf("task %s not found for explicit credential preflight", taskID)
-		}
-		return s.executor.PreflightManagedGitCredentials(
-			ctx, task.WorkspaceID, taskID, targetSession.ExecutorID, targetSession.ExecutorProfileID,
-		)
+		return s.preflightExplicitWorkflowStepCredentials(ctx, taskID, candidate, currentSession, targetStep)
 	}
-	effectiveProfile, err := s.resolveStepAgentProfileForTaskID(ctx, taskID, targetStep)
+	effectiveProfile, err := s.resolveWorkflowMovePreflightProfile(ctx, taskID, candidate, targetStep)
 	if err != nil {
 		return err
 	}
+	return s.preflightFixedWorkflowStepCredentials(ctx, taskID, candidate, currentSession, targetStep, effectiveProfile)
+}
+
+func (s *Service) preflightExplicitWorkflowStepCredentials(
+	ctx context.Context,
+	taskID string,
+	candidate *models.Task,
+	currentSession *models.TaskSession,
+	targetStep *wfmodels.WorkflowStep,
+) error {
+	var resolution workflowSessionTargetResolution
+	var err error
+	if candidate != nil {
+		resolution, err = s.resolveWorkflowSessionTargetWithTask(ctx, taskID, targetStep, candidate)
+	} else {
+		resolution, err = s.resolveWorkflowSessionTarget(ctx, taskID, targetStep)
+	}
+	if err != nil {
+		return err
+	}
+	targetSession := currentSession
+	if s.resolveStepProfileSessionStartPolicy(targetStep) == models.WorkflowProfileSessionStartPolicyReuse && resolution.session != nil {
+		targetSession = resolution.session
+	}
+	task, err := s.preflightTaskProjection(ctx, taskID, candidate)
+	if err != nil {
+		return fmt.Errorf("get task for explicit credential preflight: %w", err)
+	}
+	return s.executor.PreflightManagedGitCredentials(
+		ctx, task.WorkspaceID, taskID, targetSession.ExecutorID, targetSession.ExecutorProfileID,
+	)
+}
+
+func (s *Service) preflightFixedWorkflowStepCredentials(
+	ctx context.Context,
+	taskID string,
+	candidate *models.Task,
+	currentSession *models.TaskSession,
+	targetStep *wfmodels.WorkflowStep,
+	effectiveProfile string,
+) error {
 	startPolicy := s.resolveStepProfileSessionStartPolicy(targetStep)
 	if shouldKeepCurrentWorkflowStepSession(effectiveProfile, currentSession.AgentProfileID, startPolicy) {
 		if effectiveProfile == "" || startPolicy != models.WorkflowProfileSessionStartPolicyReuse {
@@ -4161,16 +4221,39 @@ func (s *Service) preflightWorkflowStepCredentials(
 			targetSession = existing
 		}
 	}
-	task, err := s.repo.GetTask(ctx, taskID)
+	task, err := s.preflightTaskProjection(ctx, taskID, candidate)
 	if err != nil {
 		return fmt.Errorf("get task for credential preflight: %w", err)
-	}
-	if task == nil {
-		return fmt.Errorf("task %s not found for credential preflight", taskID)
 	}
 	return s.executor.PreflightManagedGitCredentials(
 		ctx, task.WorkspaceID, taskID, targetSession.ExecutorID, targetSession.ExecutorProfileID,
 	)
+}
+
+func (s *Service) preflightTaskProjection(ctx context.Context, taskID string, candidate *models.Task) (*models.Task, error) {
+	if candidate != nil {
+		return candidate, nil
+	}
+	task, err := s.repo.GetTask(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+	if task == nil {
+		return nil, fmt.Errorf("task %s not found for credential preflight", taskID)
+	}
+	return task, nil
+}
+
+func (s *Service) resolveWorkflowMovePreflightProfile(
+	ctx context.Context,
+	taskID string,
+	candidate *models.Task,
+	targetStep *wfmodels.WorkflowStep,
+) (string, error) {
+	if candidate != nil {
+		return s.resolveStepAgentProfileForTask(ctx, candidate, targetStep), nil
+	}
+	return s.resolveStepAgentProfileForTaskID(ctx, taskID, targetStep)
 }
 
 // PreflightWorkflowStepMove exposes the destination lifecycle preflight to
@@ -4182,6 +4265,20 @@ func (s *Service) PreflightWorkflowStepMove(
 	targetStep *wfmodels.WorkflowStep,
 ) error {
 	return s.preflightWorkflowStepCredentials(ctx, taskID, currentSession, targetStep)
+}
+
+// PreflightWorkflowStepChange validates credentials against a candidate task
+// carrying the form's normalized destination profile choices.
+func (s *Service) PreflightWorkflowStepChange(
+	ctx context.Context,
+	candidate *models.Task,
+	currentSession *models.TaskSession,
+	targetStep *wfmodels.WorkflowStep,
+) error {
+	if candidate == nil {
+		return fmt.Errorf("workflow change candidate is required")
+	}
+	return s.preflightWorkflowStepCredentialsWithCandidate(ctx, candidate.ID, candidate, currentSession, targetStep)
 }
 
 // maybySwitchSessionForProfile preserves the legacy processOnEnter failure
@@ -4935,12 +5032,13 @@ func (s *Service) applyPendingMove(ctx context.Context, taskID, sessionID string
 	}
 	deferredMoveCtx := steptelemetry.WithAttribution(ctx, deferredMoveAttribution)
 	var transitionErr error
+	var transitionID int64
 	if s.messageQueue.SupportsAtomicDeferredMoveTransition() {
-		transitionErr = s.workflowStore.ApplyDeferredMoveTransition(
+		transitionID, transitionErr = s.workflowStore.ApplyDeferredMoveTransition(
 			deferredMoveCtx, taskID, sessionID, fromStepID, move.WorkflowStepID, move.MoveID, record,
 		)
 	} else {
-		transitionErr = s.workflowStore.applyTransition(
+		transitionID, transitionErr = s.workflowStore.applyTransition(
 			deferredMoveCtx, taskID, sessionID, fromStepID, move.WorkflowStepID,
 			engine.TriggerOnEnter, move.MoveID, nil,
 		)
@@ -5004,7 +5102,7 @@ func (s *Service) applyPendingMove(ctx context.Context, taskID, sessionID string
 	taskDescription := task.Description
 	go s.processStepExitAndEnterForDeferredMove(
 		context.WithoutCancel(ctx), identity, freshSession,
-		fromStepID, move.WorkflowStepID, taskDescription, move.EntryOptions,
+		fromStepID, move.WorkflowStepID, taskDescription, move.EntryOptions, transitionID,
 	)
 }
 
@@ -5053,6 +5151,7 @@ func (s *Service) processStepExitAndEnterForDeferredMove(
 	session *models.TaskSession,
 	fromStepID, toStepID, taskDescription string,
 	entryOptions *workflowmove.EntryOptions,
+	transitionID int64,
 ) {
 	current, err := s.messageQueue.ResolveSessionIdentity(ctx, identity.TaskID, identity.SessionID)
 	if err != nil || current != identity || session.QueueIncarnationID != identity.SessionIncarnationID {
@@ -5083,7 +5182,7 @@ func (s *Service) processStepExitAndEnterForDeferredMove(
 	if entryOptions != nil {
 		entryStep = workflowmove.OverlayStep(targetStep, entryOptions)
 	}
-	s.processOnEnter(ctx, identity.TaskID, fresh, entryStep, taskDescription, 0, fromStep)
+	s.processOnEnter(ctx, identity.TaskID, fresh, entryStep, taskDescription, transitionID, fromStep)
 }
 
 func (s *Service) removePendingMoveHandoffPromptForSession(
@@ -5564,8 +5663,8 @@ type passthroughRunningPreparer interface {
 // deliverPassthroughPrompt writes a prompt to PTY stdin and marks the session as running.
 // Uses the per-agent PlanPassthroughStdinChunks so Claude's inter-chunk SubmitDelay is
 // honored here too (queued / workflow-auto-start path); other agents stay on the single
-// atomic write. Falls back to the simple "\r" append if config resolution fails so a
-// transient lookup error never silently swallows the prompt.
+// atomic write. Config resolution is required: an unknown agent contract must not fall
+// back to one unframed write, because a long prompt can be silently truncated.
 //
 // Callers that already hold the per-session cancellation guard must use
 // PreparePassthroughRunning + writePassthroughPrompt instead (see handleAgentReady); this
@@ -5590,15 +5689,10 @@ func (s *Service) deliverPassthroughPrompt(ctx context.Context, sessionID, conte
 func (s *Service) writePassthroughPrompt(ctx context.Context, sessionID, content string) error {
 	pt, cfgErr := s.agentManager.ResolvePassthroughConfig(ctx, sessionID)
 	if cfgErr != nil {
-		s.logger.Warn("failed to resolve passthrough config, falling back to \\r submit",
+		s.logger.Warn("failed to resolve passthrough config; refusing unsafe prompt write",
 			zap.String("session_id", sessionID),
 			zap.Error(cfgErr))
-	}
-	if cfgErr != nil {
-		if err := s.agentManager.WritePassthroughStdin(ctx, sessionID, content+"\r"); err != nil {
-			return fmt.Errorf("write to passthrough stdin: %w", err)
-		}
-		return nil
+		return fmt.Errorf("resolve passthrough config: %w", cfgErr)
 	}
 	for _, chunk := range agents.PlanPassthroughStdinChunks(content, pt) {
 		if chunk.DelayBefore > 0 {
@@ -7209,6 +7303,7 @@ func assembleMachineState(task *models.Task, session *models.TaskSession, isPass
 	}
 	state.SessionID = session.ID
 	state.SessionState = string(session.State)
+	state.AgentProfileID = session.AgentProfileID
 	if session.Metadata != nil {
 		if wd, ok := session.Metadata["workflow_data"].(map[string]any); ok {
 			state.Data = wd
